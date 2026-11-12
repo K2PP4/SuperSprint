@@ -12,8 +12,11 @@ class Car(Actor):
         self._player_name       = player_name
         self._size              = Car_size.dims.value
 
-        # TODO Parametrizzare valori?
+        # TODO [-] Parametrizzare valori?
         self._speed             = 4
+        self._acceleration      = 1
+        self._max_speed         = 10
+        self._min_speed         = -3
         self._angle             = 0.0
         self._prev_angle        = 0.0
         self._angle_inc         = 90/8
@@ -107,21 +110,46 @@ class Car(Actor):
 
     def move(self):
         raise NotImplementedError("Abstract method implemented in child classes.")
-    
 
-class CpuCar(Car): # TODO implementare funzioni per auto CPU
-    def move(self):
-        self._frame += 1
+class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
+    def __init__(self, pos: Point, color: Car_colors, name: str = "Player", controls: dict = None):
+        super().__init__(pos, color, name)
+        self._controls = controls or {
+            "up": "ArrowUp",
+            "dn": "ArrowDown",
+            "dx": "ArrowRight",
+            "sx": "ArrowLeft"
+        }
 
-        if self._frame % 64 == 0:
-            self._angle_inc *= -1
+    def move(self, arena: Arena):
+        self._prev_pos = self._pos
+        self._prev_angle = self._angle
 
-        if self._frame % 2 == 0:
-            self._angle = (self._angle + self._angle_inc) % 360
+        if self._is_finished : return
 
-        self._pos = move_around(self._pos, self._speed, self._angle)
+        keys = arena.current_keys()
 
-class UsrCar(Car): # TODO implementare funzioni per auto USR
+        accelerating = self._controls["up"] in keys
+        braking = self._controls["dn"] in keys
+        turning_left = self._controls["sx"] in keys
+        turning_right = self._controls["dx"] in keys
+
+        if accelerating:
+            self._speed = clamp(self._speed + self._acceleration, self._min_speed, self._max_speed)
+        elif braking:
+            self._speed = clamp(self._speed - self._acceleration, self._min_speed, self._max_speed)
+
+        if abs(self._speed) > 2:
+            turn_mult = 1.0 if self._speed >= 0 else -1.0
+            if turning_left:
+                self._angle = (self._angle - self._angle_inc * turn_mult) % 360
+            if turning_right:
+                self._angle = (self._angle + self._angle_inc * turn_mult) % 360
+
+        if abs(self._speed != 0):
+            self._pos = move_around(self._pos, self._speed, self._angle)
+
+class CpuCar(Car): # TODO [-] implementare funzioni per auto CPU
     def move(self):
         self._frame += 1
 
