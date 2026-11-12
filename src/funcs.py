@@ -1,4 +1,5 @@
-from lib.actor import Actor, Point
+from src.lib.actor import Actor, Point
+from src.lib import g2d
 
 def clamp(x, min_val, max_val):
     return max(min_val, min(x, max_val))
@@ -31,3 +32,7 @@ def wall_pos(center: Point, walls: list[str]) -> Point | None:
                 yw += y + dy
                 n += 1
     return (xw * K / n + K / 2, yw * K / n + K / 2)
+
+def draw_actor(actor: Actor):
+    img_path, clip_loc, clip_size = actor.get_sprite_cutout()
+    g2d.draw_image(img_path, actor.pos(), clip_loc, clip_size)

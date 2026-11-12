@@ -1,8 +1,8 @@
-from lib.actor import Actor, Arena, Point
-from lib.polar import move_around
+from src.lib.actor import Actor, Arena, Point
+from src.lib.polar import move_around
+from src.funcs import clamp, actor_center
+from src.enums import Car_colors, Car_size
 from math import dist
-from funcs import clamp, actor_center
-from enums import Car_colors, Car_size
 
 class Car(Actor):
     def __init__(self, pos: tuple[int, int], color: Car_colors, player_name: Str = "Default"):
@@ -35,7 +35,7 @@ class Car(Actor):
         return self._player_name
 
     @property
-    def color(self) -> Car_colors:
+    def color(self) -> int:
         return self._color
 
     @property
@@ -70,11 +70,9 @@ class Car(Actor):
     def center(self) -> tuple[int, int]:
         return(self._pos[0] + self._size[0] // 2, self._pos[1] + self._size[1] / 2.0)
 
-    @property
     def pos(self) -> tuple[int, int]:
         return self._pos
 
-    @property
     def size(self) -> tuple[int, int]:
         return self._size
     
@@ -88,7 +86,7 @@ class Car(Actor):
         
         dir_col, dir_row = divmod(dir_index, 8)
 
-        color_x, color_y = divmod(self._color, 2)
+        color_x, color_y = divmod(self.color, 2)
 
         clip_x = (color_x * 8 + dir_col) * 16
         clip_y = (color_y * 4 + dir_row) * 16
@@ -128,7 +126,7 @@ class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
             "sx": "ArrowLeft"
         }
 
-    def move(self, arena: Arena):
+    def move(self, arena: Arena): # FIXME Sistemare gestione sprite, inversione sterzo e velocita'
         self._prev_pos = self._pos
         self._prev_angle = self._angle
 
