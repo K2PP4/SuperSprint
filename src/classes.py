@@ -105,10 +105,15 @@ class Car(Actor):
         """
         Bounces the car back and slows it down.
         """
+
+        # TODO Controllare tipologie di collisioni
+
+        """ media pos muri? """
+
         self._pos = self._prev_pos
         self._speed = -self._speed * damp
 
-    def move(self):
+    def move(self, arena: Arena):
         raise NotImplementedError("Abstract method implemented in child classes.")
 
 class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
