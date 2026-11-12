@@ -16,3 +16,18 @@ def load_walls(filename: str) -> list[str]:
 
 def is_wall(x, y, walls) -> bool:
     return walls[int(y)][int(x)] == "#"
+
+def wall_pos(center: Point, walls: list[str]) -> Point | None:
+    K = 8
+    xc, xy = center
+    x, y = int(xc // K), int(yc // K)
+    if not is_wall(x, y, walls):
+        return None
+    xw, yw, n = 0, 0, 0
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if is_wall(x + dx, y + dy, walls):
+                xw += x + dx
+                yw += y + dy
+                n += 1
+    return (xw * K / n + K / 2, yw * K / n + K / 2)
