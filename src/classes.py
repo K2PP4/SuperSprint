@@ -12,7 +12,8 @@ class Car(Actor):
         self._player_name       = player_name
         self._size              = Car_size.dims.value
 
-        # TODO [-] Parametrizzare valori?
+        # TODO [-] (se voglio) importare da .ini
+
         self._speed             = 4
         self._acceleration      = 1
         self._max_speed         = 10
@@ -21,6 +22,7 @@ class Car(Actor):
         self._prev_angle        = 0.0
         self._angle_inc         = 90/8
         self._frame             = 0
+        self._show              = True
 
         self._target_chkpnt_idx = 0
         self._laps              = 0
