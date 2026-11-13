@@ -114,6 +114,15 @@ class Car(Actor):
     def move(self, arena: Arena):
         raise NotImplementedError("Abstract method implemented in child classes.")
 
+    def is_in_bounds(self, arena: Arena) -> bool:
+        x, y = self.pos()
+        arenaw, arenah = arena.size()
+        carw, carh = self.size()
+        if x > 0 and x + carw < arenaw:
+            if y > 0 and y + carh < arenah:
+                return True
+        return False
+
 class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
     def __init__(self, pos: Point, color: Car_colors, name: str = "Player", controls: dict = None):
         super().__init__(pos, color, name)
@@ -154,7 +163,9 @@ class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
                     self._angle = (self._angle + self._angle_inc * turn_mult) % 360
                     self._angle_cooldown = self._angle_debounce
 
-        if abs(self._speed != 0):
+            if not self.is_in_bounds(arena):
+                self.bounce_back()
+                    
             self._pos = move_around(self._pos, self._speed, self._angle)
 
 class CpuCar(Car): # TODO [-] implementare funzioni per auto CPU

@@ -1,4 +1,4 @@
-from src.lib.g2d import init_canvas, main_loop, current_keys
+from src.lib.g2d import init_canvas, main_loop, current_keys, close_canvas
 from src.lib.actor import Arena, Actor
 from src.enums import Arena_size, Car_colors
 from src.classes import UsrCar
@@ -19,7 +19,8 @@ def tick():
     arena.tick(cur_keys)
     for a in arena.actors():
         draw_actor(a)
-    print(cur_keys)
+    if "Escape" in cur_keys:
+        close_canvas()
 
 if __name__ == "__main__":
     print("Started main (main.py)")
