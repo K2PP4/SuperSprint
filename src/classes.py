@@ -1,6 +1,6 @@
 from src.lib.actor import Actor, Arena, Point
 from src.lib.polar import move_around
-from src.funcs import clamp, actor_center
+from src.funcs import *
 from src.enums import Car_colors, Car_size
 from math import dist
 
@@ -11,8 +11,6 @@ class Car(Actor):
         self._color             = color.value
         self._player_name       = player_name
         self._size              = Car_size.dims.value
-
-        # TODO [-] (se voglio) importare da .ini
 
         self._speed             = 4
         self._acceleration      = 1
@@ -114,16 +112,7 @@ class Car(Actor):
     def move(self, arena: Arena):
         raise NotImplementedError("Abstract method implemented in child classes.")
 
-    def is_in_bounds(self, arena: Arena) -> bool:
-        x, y = self.pos()
-        arenaw, arenah = arena.size()
-        carw, carh = self.size()
-        if x > 0 and x + carw < arenaw:
-            if y > 0 and y + carh < arenah:
-                return True
-        return False
-
-class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
+class UsrCar(Car):
     def __init__(self, pos: Point, color: Car_colors, name: str = "Player", controls: dict = None):
         super().__init__(pos, color, name)
         self._controls = controls or {
@@ -163,12 +152,12 @@ class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
                     self._angle = (self._angle + self._angle_inc * turn_mult) % 360
                     self._angle_cooldown = self._angle_debounce
 
-            if not self.is_in_bounds(arena):
+            if not is_in_bounds(self, arena, 1): # TODO implementare selezione livello (shell? menu home?)
                 self.bounce_back()
                     
             self._pos = move_around(self._pos, self._speed, self._angle)
 
-class CpuCar(Car): # TODO [-] implementare funzioni per auto CPU
+class CpuCar(Car): # TODO implementare funzioni per auto CPU
     def move(self):
         self._frame += 1
 

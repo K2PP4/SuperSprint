@@ -1,5 +1,6 @@
-from src.lib.actor import Actor, Point
+from src.lib.actor import Arena, Actor, Point
 from src.lib import g2d
+import os
 
 def clamp(x, min_val, max_val):
     return max(min_val, min(x, max_val))
@@ -20,7 +21,7 @@ def is_wall(x, y, walls) -> bool:
 
 def wall_pos(center: Point, walls: list[str]) -> Point | None:
     K = 8
-    xc, xy = center
+    xc, yc = center
     x, y = int(xc // K), int(yc // K)
     if not is_wall(x, y, walls):
         return None
@@ -32,6 +33,19 @@ def wall_pos(center: Point, walls: list[str]) -> Point | None:
                 yw += y + dy
                 n += 1
     return (xw * K / n + K / 2, yw * K / n + K / 2)
+
+def is_in_bounds(actor: Actor, arena: Arena, lvl: int) -> bool:
+    x, y = actor.pos()
+    arenaw, arenah = arena.size()
+    carw, carh = actor.size()
+    wall_dir = os.path.dirname(os.path.abspath(__file__)) + f"/maps/lvl-{lvl}.txt"
+    walls = load_walls(wall_dir)
+
+    wpos = wall_pos(actor.pos(), walls)
+    if wpos is not None:
+        if is_wall(wpos[0], wpos[1], walls): return False
+    elif x > 0 and y > 0 and x + carw < arenaw and y + carh < arenah: return True
+    return False
 
 def draw_actor(actor: Actor):
     img_path, clip_loc, clip_size = actor.get_sprite_cutout()
