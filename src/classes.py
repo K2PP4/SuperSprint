@@ -5,7 +5,7 @@ from src.enums import Car_colors, Car_size
 from math import dist
 
 class Car(Actor):
-    def __init__(self, pos: tuple[int, int], color: Car_colors, player_name: Str = "Default"):
+    def __init__(self, pos: tuple[int, int], color: Car_colors, player_name: str = "Default"):
         self._pos               = pos
         self._prev_pos          = pos
         self._color             = color.value
@@ -17,9 +17,11 @@ class Car(Actor):
         self._speed             = 4
         self._acceleration      = 1
         self._max_speed         = 10
-        self._min_speed         = -3
+        self._min_speed         = -1
         self._angle             = 0.0
         self._prev_angle        = 0.0
+        self._angle_debounce    = 0
+        self._angle_cooldown    = 5
         self._angle_inc         = 90/8
         self._frame             = 0
         self._show              = True
@@ -84,9 +86,9 @@ class Car(Actor):
         sprite_angle = 360 - (self._angle % 360)
         dir_index = (int(sprite_angle * 4) // 45) % 32
         
-        dir_col, dir_row = divmod(dir_index, 8)
+        dir_row, dir_col = divmod(dir_index, 8)
 
-        color_x, color_y = divmod(self.color, 2)
+        color_y, color_x = divmod(self.color, 2)
 
         clip_x = (color_x * 8 + dir_col) * 16
         clip_y = (color_y * 4 + dir_row) * 16
@@ -105,11 +107,7 @@ class Car(Actor):
         """
         Bounces the car back and slows it down.
         """
-
         # TODO Controllare tipologie di collisioni
-
-        """ media pos muri? """
-
         self._pos = self._prev_pos
         self._speed = -self._speed * damp
 
@@ -126,9 +124,11 @@ class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
             "sx": "ArrowLeft"
         }
 
-    def move(self, arena: Arena): # FIXME Sistemare gestione sprite, inversione sterzo e velocita'
+    def move(self, arena: Arena):
         self._prev_pos = self._pos
         self._prev_angle = self._angle
+        if self._angle_cooldown > 0: 
+            self._angle_cooldown -= 1
 
         if self._is_finished : return
 
@@ -144,12 +144,15 @@ class UsrCar(Car): # TODO [-] implementare funzioni per auto USR
         elif braking:
             self._speed = clamp(self._speed - self._acceleration, self._min_speed, self._max_speed)
 
-        if abs(self._speed) > 2:
+        if self._speed != 0:
             turn_mult = 1.0 if self._speed >= 0 else -1.0
-            if turning_left:
-                self._angle = (self._angle - self._angle_inc * turn_mult) % 360
-            if turning_right:
-                self._angle = (self._angle + self._angle_inc * turn_mult) % 360
+            if self._angle_cooldown == 0:
+                if turning_left:
+                    self._angle = (self._angle - self._angle_inc * turn_mult) % 360
+                    self._angle_cooldown = self._angle_debounce
+                elif turning_right:
+                    self._angle = (self._angle + self._angle_inc * turn_mult) % 360
+                    self._angle_cooldown = self._angle_debounce
 
         if abs(self._speed != 0):
             self._pos = move_around(self._pos, self._speed, self._angle)
