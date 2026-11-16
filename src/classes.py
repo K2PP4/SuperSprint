@@ -2,7 +2,7 @@ from src.lib.actor import Actor, Arena, Point
 from src.lib.polar import move_around
 from src.funcs import clamp, actor_center, is_in_bounds
 from src.enums import Car_colors, Car_size
-from math import dist
+from math import dist, degrees, atan2
 import os
 
 class Car(Actor):
@@ -167,15 +167,71 @@ class UsrCar(Car):
                 self.bounce_back()
 
 class CpuCar(Car):
+    def __init__(self, pos: Point, color: Car_colors, name: str = "CPU",
+                 waypoints: list[Point] = None, max_speed: float = 5.0):
+        super().__init__(pos, color, name)
+        self._waypoints = waypoints or []
+        self._current_wp_idx = 0
+        self._max_speed = max_speed
+        self._angle = 180.0  # Facing left along starting grid
+        self._speed = 0.0
+
+    @property
+    def waypoints(self) -> list[Point]:
+        return self._waypoints
+
+    @waypoints.setter
+    def waypoints(self, wps: list[Point]):
+        self._waypoints = wps
+
+    @property
+    def current_waypoint_index(self) -> int:
+        return self._current_wp_idx
+
     def move(self, arena: Arena = None):
+        if self._is_finished:
+            return
+
         self._frame += 1
 
-        if self._frame % 64 == 0:
-            self._angle_inc *= -1
+        # If waypoints are available, steer towards target waypoint
+        if self._waypoints:
+            tx, ty = self._waypoints[self._current_wp_idx]
+            cx, cy = self.center
+            dx = tx - cx
+            dy = ty - cy
+            dist_to_wp = dist((cx, cy), (tx, ty))
 
-        if self._frame % 2 == 0:
-            self._angle = (self._angle + self._angle_inc) % 360
+            # Reached waypoint -> advance to next
+            if dist_to_wp < 24:
+                self.advance_checkpoint(len(self._waypoints))
+                self._current_wp_idx = (self._current_wp_idx + 1) % len(self._waypoints)
+                tx, ty = self._waypoints[self._current_wp_idx]
+                dx = tx - cx
+                dy = ty - cy
 
+            desired_ang = degrees(atan2(dy, dx)) % 360
+            angle_diff = (desired_ang - self._angle + 180) % 360 - 180
+
+            # Smooth steering towards target waypoint
+            if angle_diff > 2:
+                self._angle = (self._angle + min(self._angle_inc, angle_diff)) % 360
+            elif angle_diff < -2:
+                self._angle = (self._angle + max(-self._angle_inc, angle_diff)) % 360
+
+            # Slow down slightly in sharp curves, accelerate on straights
+            if abs(angle_diff) > 20:
+                self._speed = max(2.5, self._speed - 0.4)
+            else:
+                self._speed = min(self._max_speed, self._speed + 0.3)
+        else:
+            # Fallback simple wandering if no waypoints
+            if self._frame % 64 == 0:
+                self._angle_inc *= -1
+            if self._frame % 2 == 0:
+                self._angle = (self._angle + self._angle_inc) % 360
+
+        # Move with collision check
         if arena is not None and self._speed != 0:
             next_pos = move_around(self._pos, self._speed, self._angle)
             if is_in_bounds(self, arena, 1, pos=next_pos):
@@ -183,6 +239,7 @@ class CpuCar(Car):
                 self._pos = next_pos
             else:
                 self.bounce_back()
+                self._angle = (self._angle + self._angle_inc) % 360
         else:
             self._pos = move_around(self._pos, self._speed, self._angle)
 

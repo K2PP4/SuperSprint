@@ -12,6 +12,8 @@ from src.funcs import (
     init_arena,
     draw_walls,
     draw_actor,
+    draw_debug_info,
+    load_waypoints,
     actor_center,
     clamp
 )
@@ -76,7 +78,6 @@ class TestSuperSprintFixes(unittest.TestCase):
         car._speed = 0.0
         initial_angle = car.angle
 
-        # Mock arena keys with ArrowLeft
         self.arena.spawn(car)
         car._angle_cooldown = 0
         self.arena.tick(keys=["ArrowLeft"])
@@ -113,7 +114,6 @@ class TestSuperSprintFixes(unittest.TestCase):
 
     def test_multidirectional_bounce(self):
         """Test that hitting walls at various angles bounces cleanly without getting stuck."""
-        # Test 4 cardinal directions and 4 diagonal directions
         for angle in [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]:
             arena = Arena(Arena_size.dims.value)
             car = UsrCar((250, 250), Car_colors.red)
@@ -121,16 +121,14 @@ class TestSuperSprintFixes(unittest.TestCase):
             car._angle = angle
             car._speed = 10.0
 
-            # Drive straight into obstacle until collision occurs
             hit_wall = False
             for _ in range(50):
                 arena.tick(keys=["ArrowUp"])
-                if car._speed < 0: # bounced!
+                if car._speed < 0:
                     hit_wall = True
                     break
 
             self.assertTrue(hit_wall, f"Car never hit wall moving at angle {angle}")
-            # Position at bounce must still be in bounds
             self.assertTrue(is_in_bounds(car, arena, 1, pos=car.pos()),
                             f"Car ended inside wall at angle {angle}: {car.pos()}")
 
@@ -141,8 +139,62 @@ class TestSuperSprintFixes(unittest.TestCase):
         draw_walls(lvl=1)
         car = UsrCar((250, 250), Car_colors.red)
         draw_actor(car)
-        from src.funcs import draw_debug_info
         draw_debug_info(car, lvl=1)
+
+    def test_load_waypoints(self):
+        """Test that load_waypoints finds all @ points in lvl-1.txt and orders them."""
+        wps = load_waypoints(1)
+        self.assertGreaterEqual(len(wps), 10, "Expected at least 10 waypoints in map")
+        # Ensure all waypoints are in bounds
+        car = UsrCar((0, 0), Car_colors.yellow)
+        for i, wp in enumerate(wps):
+            # Tile center to top-left
+            car_pos = (wp[0] - 8, wp[1] - 8)
+            self.assertTrue(is_in_bounds(car, self.arena, 1, pos=car_pos),
+                            f"Waypoint {i+1} at {wp} collides with wall!")
+
+    def test_starting_grid_side_by_side(self):
+        """Test that all 4 cars start side by side at the start line facing left."""
+        wps = load_waypoints(1)
+        grid = [
+            (Car_colors.yellow, (175, 338)),
+            (Car_colors.blue,   (175, 354)),
+            (Car_colors.red,    (175, 370)),
+            (Car_colors.white,  (175, 386)),
+        ]
+        cars = []
+        for col, pos in grid:
+            car = CpuCar(pos, col, waypoints=wps) if col != Car_colors.red else UsrCar(pos, col)
+            car._angle = 180.0
+            cars.append(car)
+            self.assertTrue(is_in_bounds(car, self.arena, 1, pos=pos),
+                            f"Start position {pos} for {col.name} is blocked!")
+            self.assertEqual(car.angle, 180.0)
+
+        # Check they have same X coordinate (side-by-side on vertical grid line)
+        xs = [c.pos()[0] for c in cars]
+        self.assertTrue(all(x == xs[0] for x in xs))
+        # Check ascending Y positions with spacing
+        ys = [c.pos()[1] for c in cars]
+        for i in range(len(ys) - 1):
+            self.assertEqual(ys[i+1] - ys[i], 16)
+
+    def test_cpu_car_waypoint_driving(self):
+        """Test that CpuCar autonomously follows waypoints around the track."""
+        wps = load_waypoints(1)
+        cpu = CpuCar((175, 338), Car_colors.yellow, waypoints=wps, max_speed=5.0)
+        self.arena.spawn(cpu)
+
+        initial_pos = cpu.pos()
+        # Run 500 ticks
+        for _ in range(500):
+            self.arena.tick()
+
+        # The car must have driven along waypoints and advanced
+        self.assertNotEqual(cpu.pos(), initial_pos)
+        self.assertGreater(cpu.total_checkpoints_hit, 0)
+        self.assertTrue(is_in_bounds(cpu, self.arena, 1, pos=cpu.pos()),
+                        f"CpuCar ended out of bounds: {cpu.pos()}")
 
     def test_curved_wall_methods(self):
         """Test that CurvedWall center() call does not raise TypeError."""
