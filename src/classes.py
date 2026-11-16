@@ -173,7 +173,7 @@ class CpuCar(Car):
         self._waypoints = waypoints or []
         self._current_wp_idx = 0
         self._max_speed = max_speed
-        self._angle = 180.0  # Facing left along starting grid
+        self._angle = 0.0  # Facing right (counter-clockwise on top straight)
         self._speed = 0.0
 
     @property

@@ -8,14 +8,22 @@ arena = Arena(Arena_size.dims.value)
 debug_mode = False
 
 # Carica i waypoint definiti con '@' nella mappa del livello 1
-waypoints = load_waypoints(1)
+# Partenza dal rettilineo alto, direzione verso destra (antiorario)
+waypoints = load_waypoints(1, start_pos=(168, 92), start_heading=(1.0, 0.0))
 
-# Allinea le 4 auto sulla linea di partenza, una affianco all'altra, rivolte a sinistra (180°)
-cpu_yellow = CpuCar((175, 338), Car_colors.yellow, "CPU 1", waypoints=waypoints, max_speed=5.3)
-cpu_blue   = CpuCar((175, 354), Car_colors.blue,   "CPU 2", waypoints=waypoints, max_speed=5.0)
-p1_car     = UsrCar((175, 370), Car_colors.red,    "Player")
-p1_car._angle = 180.0
-cpu_white  = CpuCar((175, 386), Car_colors.white,  "CPU 3", waypoints=waypoints, max_speed=4.7)
+# ── Griglia di partenza sul rettilineo alto (Finish Line) ──
+# Le auto partono affiancate verticalmente, rivolte a destra (0°) per il senso antiorario
+# Posizione: appena prima della FL (x=160), y staggered a righe 10-13
+START_X     = 160
+START_Y_GAP = 8                     # 8px tra ogni auto (compatto come nell'arcade)
+START_ANGLE = 180                   # Facing right (counter-clockwise on top straight)
+
+cpu_yellow = CpuCar((START_X, 80),               Car_colors.yellow, "CPU 1", waypoints=waypoints, max_speed=9)
+cpu_blue   = CpuCar((START_X, 80 + START_Y_GAP), Car_colors.blue,   "CPU 2", waypoints=waypoints, max_speed=4)
+p1_car     = UsrCar((START_X, 80 + START_Y_GAP * 2), Car_colors.red, "Player")
+p1_car._angle     = START_ANGLE
+p1_car._max_speed = 4.5             # Velocità massima ridotta per il giocatore
+cpu_white  = CpuCar((START_X, 80 + START_Y_GAP * 3), Car_colors.white, "CPU 3", waypoints=waypoints, max_speed=3)
 
 def main():
     init_canvas(Arena_size.dims.value)

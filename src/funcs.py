@@ -28,7 +28,8 @@ def get_cached_walls(lvl: int = 1) -> list[str]:
 def is_wall(x, y, walls: list[str]) -> bool:
     iy, ix = int(y), int(x)
     if 0 <= iy < len(walls) and 0 <= ix < len(walls[iy]):
-        return walls[iy][ix] == "#"
+        ch = walls[iy][ix]
+        return ch not in (" ", "@", "F")
     return True
 
 def wall_pos(center: Point, walls: list[str]) -> Point | None:
@@ -82,10 +83,12 @@ def is_in_bounds(actor: Actor, arena: Arena, lvl: int = 1, pos: Point = None, wa
 
     return True
 
-def load_waypoints(lvl: int = 1) -> list[Point]:
+def load_waypoints(lvl: int = 1, start_pos: tuple = None, start_heading: tuple = None) -> list[Point]:
     """
     Extracts and orders waypoints marked with '@' from maps/lvl-{lvl}.txt.
-    Returns pixel coordinates (x, y) along the racing line.
+    Returns pixel coordinates (x, y) along the racing line (counter-clockwise).
+    start_pos: pixel position of the starting grid (default: FL on top straight).
+    start_heading: initial direction as (dx, dy) unit vector (default: (1,0) = right).
     """
     wall_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps", f"lvl-{lvl}.txt")
     raw_wps = []
@@ -99,17 +102,31 @@ def load_waypoints(lvl: int = 1) -> list[Point]:
     if not raw_wps:
         return []
 
-    # Order along the counter-clockwise track loop from start line (175, 360) going left
-    start_pos = (175, 360)
-    ahead_wps = [p for p in raw_wps if p[0] < start_pos[0] and 330 <= p[1] <= 400]
-    first_wp = min(ahead_wps, key=lambda p: start_pos[0] - p[0]) if ahead_wps else raw_wps[0]
+    # Default: start from finish line on top straight, heading RIGHT (counter-clockwise)
+    if start_pos is None:
+        start_pos = (168, 92)
+    if start_heading is None:
+        start_heading = (1.0, 0.0)
+
+    # Find first waypoint ahead of start position along the heading direction
+    scored = []
+    for p in raw_wps:
+        dx = p[0] - start_pos[0]
+        dy = p[1] - start_pos[1]
+        d = (dx ** 2 + dy ** 2) ** 0.5
+        if d > 0:
+            dot = (dx * start_heading[0] + dy * start_heading[1]) / d
+            if dot > 0.3:  # Waypoint is roughly ahead
+                scored.append((d * (2.0 - dot), p))
+    scored.sort(key=lambda x: x[0])
+    first_wp = scored[0][1] if scored else raw_wps[0]
 
     ordered = [first_wp]
     remaining = set(raw_wps)
     remaining.discard(first_wp)
 
     curr = first_wp
-    heading = (-1.0, 0.0)
+    heading = start_heading
 
     while remaining:
         best_p = None
@@ -136,6 +153,21 @@ def load_waypoints(lvl: int = 1) -> list[Point]:
         curr = best_p
 
     return ordered
+
+def load_finish_line(lvl: int = 1) -> list[Point]:
+    """
+    Reads 'F' markers from maps/lvl-{lvl}.txt and returns the pixel rectangles
+    forming the finish line. Returns list of (x, y) pixel positions (top-left of each 8x8 tile).
+    """
+    wall_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps", f"lvl-{lvl}.txt")
+    tiles = []
+    if os.path.exists(wall_dir):
+        with open(wall_dir) as f:
+            for r, line in enumerate(f):
+                for c, ch in enumerate(line.rstrip("\n")):
+                    if ch == "F":
+                        tiles.append((c * 8, r * 8))
+    return tiles
 
 def draw_actor(actor: Actor):
     img_path, clip_loc, clip_size = actor.get_sprite_cutout()
