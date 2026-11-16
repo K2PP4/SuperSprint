@@ -13,5 +13,5 @@ class Car_size(Enum):
 
 class Arena_size(Enum):
     width = 512
-    height = 512
-    dims = (512, 512)
+    height = 480
+    dims = (512, 480)
