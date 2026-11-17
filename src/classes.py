@@ -13,22 +13,22 @@ WRENCH_CLIP  = ((24, 160), (8, 10))
 OIL_CLIP     = ((8, 160), (8, 8))
 
 # ── Gameplay tuning ──
-SPIN_FRAMES         = 30        # duration of the oil-puddle spin, in frames
-SPIN_TURNS          = 2         # full rotations performed during the spin
-SPIN_STEP           = 360 * SPIN_TURNS / SPIN_FRAMES   # degrees per frame
-SPIN_SLIDE_SPEED    = 2.0       # minimum speed the car keeps sliding with
-SPIN_FRICTION       = 0.97      # speed multiplier per frame while spinning
-BOUNCE_FRAMES       = 30        # frames of lost control after hitting a wall
-BOUNCE_MIN_SPEED    = 1.0       # minimum rebound speed, so the bounce is always visible
-BOUNCE_FRICTION     = 0.9       # speed multiplier per frame while bouncing
-DETOUR_RADIUS       = 90        # CPU: how far it looks for a wrench/puddle to aim at
-DETOUR_TIMEOUT      = 60        # CPU: frames after which it gives up a detour
-WP_JITTER           = 8         # CPU: random offset (px) applied to each waypoint
-WP_REACH_RADIUS     = 16        # CPU: distance (px) at which a waypoint counts as reached
-STUCK_FRAMES        = 120      # CPU: frames without leaving STUCK_RADIUS before it is reset
-STUCK_RADIUS        = 12        # CPU: px
-WRENCH_SPEED_BONUS  = 0.5       # max-speed bonus per wrench
-MAX_WRENCHES        = 5         # wrenches beyond this are collected but give no bonus
+SPIN_FRAMES         = 30                                # duration of the oil-puddle spin, in frames
+SPIN_TURNS          = 2                                 # full rotations performed during the spin
+SPIN_STEP           = 360 * SPIN_TURNS / SPIN_FRAMES    # degrees per frame
+SPIN_SLIDE_SPEED    = 2.0                               # minimum speed the car keeps sliding with
+SPIN_FRICTION       = 0.97                              # speed multiplier per frame while spinning
+BOUNCE_FRAMES       = 30                                # frames of lost control after hitting a wall
+BOUNCE_MIN_SPEED    = 1.0                               # minimum rebound speed, so the bounce is always visible
+BOUNCE_FRICTION     = 0.9                               # speed multiplier per frame while bouncing
+DETOUR_RADIUS       = 90                                # CPU: how far it looks for a wrench/puddle to aim at
+DETOUR_TIMEOUT      = 60                                # CPU: frames after which it gives up a detour
+WP_JITTER           = 8                                 # CPU: random offset (px) applied to each waypoint
+WP_REACH_RADIUS     = 16                                # CPU: distance (px) at which a waypoint counts as reached
+STUCK_FRAMES        = 120                               # CPU: frames without leaving STUCK_RADIUS before it is reset
+STUCK_RADIUS        = 12                                # CPU: px
+WRENCH_SPEED_BONUS  = 0.5                               # max-speed bonus per wrench
+MAX_WRENCHES        = 5                                 # wrenches beyond this are collected but give no bonus
 
 class Car(Actor):
     def __init__(self, pos: tuple[int, int], color: Car_colors, player_name: str = "Default",
@@ -43,7 +43,7 @@ class Car(Actor):
         self._acceleration      = 1.0
         self._max_speed         = 10.0
         self._min_speed         = -2.0
-        self._angle             = angle     # heading in degrees (0 = right, 180 = left)
+        self._angle             = angle                 # heading in degrees (0 = right, 180 = left)
         self._prev_angle        = 0.0
         self._angle_debounce    = 0
         self._angle_cooldown    = 5
@@ -58,10 +58,10 @@ class Car(Actor):
         self._finished_rank     = 0
 
         self._wrenches          = 0
-        self._spin_frames       = 0     # >0 while spinning on oil
-        self._spin_heading      = 0.0   # direction the car keeps sliding along
-        self._on_oil            = False # True while touching a puddle
-        self._bounce_frames     = 0     # >0 while rebounding from a wall
+        self._spin_frames       = 0                     # >0 while spinning on oil
+        self._spin_heading      = 0.0                   # direction the car keeps sliding along
+        self._on_oil            = False                 # True while touching a puddle
+        self._bounce_frames     = 0                     # >0 while rebounding from a wall
         self._bounce_heading    = 0.0
 
     @property
@@ -329,6 +329,7 @@ class CpuCar(Car):
         super().__init__(pos, color, name, angle)
         self._waypoints = waypoints or []
         self._current_wp_idx = 0
+        
         # "Human error" model: each time the CPU picks a new waypoint it may aim
         # at a nearby wrench (wrench_chance) or, by mistake, at a puddle (oil_chance).
         self._wrench_chance = wrench_chance
@@ -337,6 +338,7 @@ class CpuCar(Car):
         self._wp_offset = (0.0, 0.0)
         self._detour_item = None
         self._detour_age = 0
+
         # Stuck detection: if the car stays near the same spot for too long, reset it
         self._anchor_pos = pos
         self._anchor_frames = 0

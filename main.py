@@ -8,19 +8,19 @@ from src.race import Race
 arena = Arena(Arena_size.dims.value)
 
 # ── Debug mode state ──
-DEBUG_WINDOW = 30                   # frames between console updates
+DEBUG_WINDOW = 30                                       # frames between console updates
 debug_mode = False
-debug_frames = 0                    # frames elapsed since debug mode was enabled
-debug_keys: set[str] = set()        # keys seen during the current 30-frame window
+debug_frames = 0                                        # frames elapsed since debug mode was enabled
+debug_keys: set[str] = set()                            # keys seen during the current 30-frame window
 
 # ── Starting grid ──
 # The cars drive COUNTER-CLOCKWISE: along the top straight that means heading LEFT
 # (angle 180°). The grid is placed just RIGHT of the finish line (FL, around x=236),
 # so every car starts behind the line and crosses it while driving left.
-START_X     = 264                   # left edge of the grid, right of the FL
-START_Y     = 80                    # y of the first car on the top straight
-START_Y_GAP = 8                     # px between cars (compact, like the arcade)
-START_ANGLE = 180                   # 180° = facing left, same angle for ALL cars
+START_X     = 264                                       # left edge of the grid, right of the FL
+START_Y     = 80                                        # y of the first car on the top straight
+START_Y_GAP = 8                                         # px between cars (compact, like the arcade)
+START_ANGLE = 180                                       # 180° = facing left, same angle for ALL cars
 
 # Waypoints ('@' in the level map), ordered counter-clockwise starting from the grid
 waypoints = load_waypoints(1, start_pos=(START_X, START_Y + 12), start_heading=(-1.0, 0.0))
@@ -90,7 +90,7 @@ def update_debug_console(keys: list[str]):
 
 def main():
     init_canvas(Arena_size.dims.value)
-    spawn_items(1)                  # items first: actors are drawn in spawn order, so cars end up on top
+    spawn_items(1)                                      # items first: actors are drawn in spawn order, so cars end up on top
     arena.spawn(p1_car)
     arena.spawn(cpu_yellow)
     arena.spawn(cpu_blue)
@@ -110,10 +110,10 @@ def tick():
 
     # Advance the game one frame and draw every actor
     arena.tick(cur_keys)
-    race.update()                   # checkpoints, lap counting, finish order
+    race.update()                                       # checkpoints, lap counting, finish order
     for a in arena.actors():
         draw_actor(a)
-    race.draw_hud(p1_car)           # lap / position / time in the top bar
+    race.draw_hud(p1_car)                               # lap / position / time in the top bar
 
     if debug_mode:
         draw_debug_info(p1_car, lvl=1)
