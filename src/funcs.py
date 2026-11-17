@@ -5,6 +5,10 @@ import os
 
 _walls_cache: dict[int, list[str]] = {}
 
+# Map characters that are drivable (not walls):
+#   ' ' track, '@' waypoint, 'F' finish line, 'w' wrench, 'p' oil puddle
+_FREE_TILES = (" ", "@", "F", "w", "p")
+
 def clamp(x, min_val, max_val):
     return max(min_val, min(x, max_val))
 
@@ -29,7 +33,7 @@ def is_wall(x, y, walls: list[str]) -> bool:
     iy, ix = int(y), int(x)
     if 0 <= iy < len(walls) and 0 <= ix < len(walls[iy]):
         ch = walls[iy][ix]
-        return ch not in (" ", "@", "F")
+        return ch not in _FREE_TILES
     return True
 
 def wall_pos(center: Point, walls: list[str]) -> Point | None:
@@ -83,30 +87,39 @@ def is_in_bounds(actor: Actor, arena: Arena, lvl: int = 1, pos: Point = None, wa
 
     return True
 
+def load_items(lvl: int, marker: str) -> list[Point]:
+    """
+    Returns the pixel centers (x, y) of every tile marked with `marker`
+    in maps/lvl-{lvl}.txt (e.g. 'w' = wrench, 'p' = oil puddle).
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps", f"lvl-{lvl}.txt")
+    centers = []
+    if os.path.exists(path):
+        with open(path) as f:
+            for r, line in enumerate(f):
+                for c, ch in enumerate(line.rstrip("\n")):
+                    if ch == marker:
+                        centers.append((c * 8 + 4, r * 8 + 4))
+    return centers
+
 def load_waypoints(lvl: int = 1, start_pos: tuple = None, start_heading: tuple = None) -> list[Point]:
     """
     Extracts and orders waypoints marked with '@' from maps/lvl-{lvl}.txt.
-    Returns pixel coordinates (x, y) along the racing line (counter-clockwise).
-    start_pos: pixel position of the starting grid (default: FL on top straight).
-    start_heading: initial direction as (dx, dy) unit vector (default: (1,0) = right).
+    Returns pixel coordinates (x, y) along the racing line (counter-clockwise on screen).
+    start_pos: pixel position of the starting grid (default: just right of the FL, on the top straight).
+    start_heading: initial direction as (dx, dy) unit vector (default: (-1,0) = left,
+    which is counter-clockwise along the top straight).
     """
-    wall_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps", f"lvl-{lvl}.txt")
-    raw_wps = []
-    if os.path.exists(wall_dir):
-        with open(wall_dir) as f:
-            for r, line in enumerate(f):
-                for c, ch in enumerate(line.rstrip("\n")):
-                    if ch == "@":
-                        raw_wps.append((c * 8 + 4, r * 8 + 4))
+    raw_wps = load_items(lvl, "@")
 
     if not raw_wps:
         return []
 
-    # Default: start from finish line on top straight, heading RIGHT (counter-clockwise)
+    # Default: start behind the finish line (to its right), heading LEFT (counter-clockwise)
     if start_pos is None:
-        start_pos = (168, 92)
+        start_pos = (264, 92)
     if start_heading is None:
-        start_heading = (1.0, 0.0)
+        start_heading = (-1.0, 0.0)
 
     # Find first waypoint ahead of start position along the heading direction
     scored = []
@@ -159,19 +172,34 @@ def load_finish_line(lvl: int = 1) -> list[Point]:
     Reads 'F' markers from maps/lvl-{lvl}.txt and returns the pixel rectangles
     forming the finish line. Returns list of (x, y) pixel positions (top-left of each 8x8 tile).
     """
-    wall_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps", f"lvl-{lvl}.txt")
-    tiles = []
-    if os.path.exists(wall_dir):
-        with open(wall_dir) as f:
-            for r, line in enumerate(f):
-                for c, ch in enumerate(line.rstrip("\n")):
-                    if ch == "F":
-                        tiles.append((c * 8, r * 8))
-    return tiles
+    return [(cx - 4, cy - 4) for cx, cy in load_items(lvl, "F")]
+
+def load_finish_zone(lvl: int = 1) -> tuple[float, float, float] | None:
+    """
+    Finds the finish line ('F' in the map) and returns (x, y_top, y_bottom) in pixels:
+    the x of the line, and the vertical extent of the road along that column
+    (from the first wall above to the first wall below). None if the map has no 'F'.
+    """
+    centers = load_items(lvl, "F")
+    if not centers:
+        return None
+    walls = get_cached_walls(lvl)
+    cx, cy = centers[0]
+    col, row = int(cx // 8), int(cy // 8)
+    top = bottom = row
+    while top > 0 and not is_wall(col, top - 1, walls):
+        top -= 1
+    while not is_wall(col, bottom + 1, walls):
+        bottom += 1
+    return (cx, top * 8, (bottom + 1) * 8)
 
 def draw_actor(actor: Actor):
-    img_path, clip_loc, clip_size = actor.get_sprite_cutout()
-    g2d.draw_image(img_path, actor.pos(), clip_loc, clip_size)
+    # Cars use the spritesheet; items (wrench, oil) draw themselves.
+    if hasattr(actor, "get_sprite_cutout"):
+        img_path, clip_loc, clip_size = actor.get_sprite_cutout()
+        g2d.draw_image(img_path, actor.pos(), clip_loc, clip_size)
+    elif hasattr(actor, "draw"):
+        actor.draw()
 
 def init_arena(lvl: int = 1, size: tuple[int, int] = Arena_size.dims.value):
     img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "super-sprint-bg.png")
@@ -205,7 +233,10 @@ def draw_debug_info(car: Actor, lvl: int = 1):
     row = int((y + h / 2) // 8)
     speed = getattr(car, "speed", 0.0)
     angle = getattr(car, "angle", 0.0)
-    info_text = f"DEBUG [W] | Pos: ({int(x)}, {int(y)}) | Tile: ({col}, {row}) | Spd: {speed:.1f} | Ang: {int(angle)}deg | WPs: {len(wps)}"
+    wrenches = getattr(car, "wrenches", 0)
+    spin = getattr(car, "spin_frames", 0)
+    info_text = (f"DEBUG [W] | Pos: ({int(x)}, {int(y)}) | Tile: ({col}, {row}) | Spd: {speed:.1f} "
+                 f"| Ang: {int(angle)}deg | WPs: {len(wps)} | Wr: {wrenches} | Spin: {spin}")
     g2d.set_color((0, 0, 0, 180), width=0)
     g2d.draw_rect((4, 4), (len(info_text) * 7 + 10, 18))
     g2d.set_color((255, 255, 255), width=0)
