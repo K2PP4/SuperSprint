@@ -5,6 +5,7 @@ from src.lib.g2d import (
     close_canvas,
     clear_canvas,
     key_pressed,
+    alert,
 )
 from src.lib.actor import Arena
 from src.enums import Arena_size, Car_colors
@@ -20,71 +21,12 @@ from src.funcs import (
 from src.race import Race
 
 
-class SuperSprintGUI:
-    DEBUG_WINDOW = 30
-
-    def __init__(self, game: "SuperSprintGme"):
-        self.game = game
-        self.debug_mode = False
-        self.debug_frames = 0
-        self.debug_keys: set[str] = set()
-
-    def run(self):
-        init_canvas(Arena_size.dims.value)
-        self.game.spawn_items()
-        self.game.arena.spawn(self.game.player)
-        self.game.arena.spawn(self.game.cpu_yellow)
-        self.game.arena.spawn(self.game.cpu_blue)
-        self.game.arena.spawn(self.game.cpu_white)
-        main_loop(self.tick)
-
-    def tick(self):
-        clear_canvas()
-        init_arena(self.game.level)
-
-        cur_keys = current_keys()
-        if key_pressed("w") or key_pressed("W"):
-            self.set_debug(not self.debug_mode)
-
-        self.game.arena.tick(cur_keys)
-        self.game.race.update()
-        for actor in self.game.arena.actors():
-            draw_actor(actor)
-        self.game.race.draw_hud(self.game.player)
-
-        if self.debug_mode:
-            draw_debug_info(
-                self.game.player,
-                lvl=self.game.level,
-                gates=(self.game.finish_line, self.game.splits),
-            )
-            self.update_debug_console(cur_keys)
-
-        if "Escape" in cur_keys:
-            close_canvas()
-
-    def set_debug(self, enabled: bool):
-        self.debug_mode = enabled
-        self.debug_frames = 0
-        self.debug_keys.clear()
-        if enabled:
-            print("Debug mode ON  (press W to turn it off)")
-        else:
-            print("\nDebug mode OFF")
-
-    def update_debug_console(self, keys: list[str]):
-        self.debug_keys.update(keys)
-        self.debug_frames += 1
-        if self.debug_frames % self.DEBUG_WINDOW == 0:
-            step = (self.debug_frames // self.DEBUG_WINDOW - 1) % 3 + 1
-            dots = ("." * step).ljust(3)
-            pressed = ", ".join(sorted(self.debug_keys)) or "none"
-            line = f"Debug mode running{dots} | keys (last {self.DEBUG_WINDOW}f): {pressed}"
-            print("\r" + line.ljust(78), end="", flush=True)
-            self.debug_keys.clear()
-
-
-class SuperSprintGme:
+class SuperSprintGame:
+    """
+    Game logic: builds the characters from the level configuration file
+    (maps/lvl-N.txt), encapsulates cars and arena, and checks how the race ends.
+    It knows nothing about drawing: that is the job of SuperSprintGui.
+    """
     START_X = 264
     START_Y = 80
     START_Y_GAP = 8
@@ -122,7 +64,7 @@ class SuperSprintGme:
             "Player",
             angle=self.START_ANGLE,
         )
-        self.player.max_speed = 5
+        self.player.max_speed(5)
         self.cpu_white = CpuCar(
             self.grid_pos(3),
             Car_colors.white,
@@ -141,7 +83,7 @@ class SuperSprintGme:
             total_laps=self.TOTAL_LAPS,
             log=self.log,
         )
-        self.gui = SuperSprintGUI(self)
+        self.spawn_actors()
 
     def grid_pos(self, slot: int) -> tuple[int, int]:
         return (self.START_X, self.START_Y + self.START_Y_GAP * slot)
@@ -149,16 +91,101 @@ class SuperSprintGme:
     def log(self, message: str):
         print("\r" + message.ljust(78))
 
-    def spawn_items(self):
+    def spawn_actors(self):
+        """Puts items (from the map file) and cars into the arena."""
         for center in load_items(self.level, "w"):
             self.arena.spawn(Wrench(center))
         for center in load_items(self.level, "p"):
             self.arena.spawn(OilPuddle(center))
+        for car in self.race.cars:
+            self.arena.spawn(car)
 
-    def run(self):
-        self.gui.run()
+    def tick(self, keys: list[str]):
+        """Advances the game by one frame."""
+        self.arena.tick(keys)
+        self.race.update()
+
+    def game_over(self) -> bool:
+        """The game ends when the player completes the race."""
+        return self.player.is_finished
+
+    def game_won(self) -> bool:
+        """Positive conclusion: the player finished first."""
+        return self.player.is_finished and self.player.finish_rank == 1
+
+
+class SuperSprintGui:
+    """
+    Representation of the game: drawing (images and g2d functions),
+    keyboard input, debug overlay and the tick method.
+    """
+    DEBUG_WINDOW = 30
+
+    def __init__(self, game: SuperSprintGame):
+        self.game = game
+        self.debug_mode = False
+        self.debug_frames = 0
+        self.debug_keys: set[str] = set()
+
+    def tick(self):
+        clear_canvas()
+        init_arena(self.game.level)
+
+        cur_keys = current_keys()
+        if key_pressed("w") or key_pressed("W"):
+            self.set_debug(not self.debug_mode)
+
+        self.game.tick(cur_keys)
+        for actor in self.game.arena.actors():
+            draw_actor(actor)
+        self.game.race.draw_hud(self.game.player)
+
+        if self.debug_mode:
+            draw_debug_info(
+                self.game.player,
+                lvl=self.game.level,
+                gates=(self.game.finish_line, self.game.splits),
+            )
+            self.update_debug_console(cur_keys)
+
+        if self.game.game_over():
+            if self.game.game_won():
+                alert("You win!")
+            else:
+                alert("Race finished, better luck next time!")
+            close_canvas()
+
+        if "Escape" in cur_keys:
+            close_canvas()
+
+    def set_debug(self, enabled: bool):
+        self.debug_mode = enabled
+        self.debug_frames = 0
+        self.debug_keys.clear()
+        if enabled:
+            print("Debug mode ON  (press W to turn it off)")
+        else:
+            print("\nDebug mode OFF")
+
+    def update_debug_console(self, keys: list[str]):
+        self.debug_keys.update(keys)
+        self.debug_frames += 1
+        if self.debug_frames % self.DEBUG_WINDOW == 0:
+            step = (self.debug_frames // self.DEBUG_WINDOW - 1) % 3 + 1
+            dots = ("." * step).ljust(3)
+            pressed = ", ".join(sorted(self.debug_keys)) or "none"
+            line = f"Debug mode running{dots} | keys (last {self.DEBUG_WINDOW}f): {pressed}"
+            print("\r" + line.ljust(78), end="", flush=True)
+            self.debug_keys.clear()
+
+
+def main():
+    game = SuperSprintGame()
+    gui = SuperSprintGui(game)
+    init_canvas(Arena_size.dims.value)
+    main_loop(gui.tick)
 
 
 if __name__ == "__main__":
     print("Started main (main.py)")
-    SuperSprintGme().run()
+    main()
