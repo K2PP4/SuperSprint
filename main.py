@@ -17,7 +17,6 @@ from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
 from src.funcs import (
     draw_actor,
     init_arena,
-    draw_debug_info,
     load_waypoints,
     load_items,
     load_gates,

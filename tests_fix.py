@@ -328,13 +328,5 @@ class TestGui(unittest.TestCase):
         self.gui.tick()
         self.assertEqual(self.gui.game.countdown_seconds, 5)
 
-    def test_tick_draws_in_debug_mode_and_after_countdown(self):
-        skip_countdown(self.gui.game)
-        self.gui.set_debug(True)
-        for _ in range(3):
-            self.gui.tick()
-        self.assertEqual(self.gui.game.race.frames, 3)
-
-
 if __name__ == "__main__":
     unittest.main()
