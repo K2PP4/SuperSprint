@@ -1,3 +1,5 @@
+from math import ceil
+
 from src.lib.g2d import (
     init_canvas,
     main_loop,
@@ -6,6 +8,8 @@ from src.lib.g2d import (
     clear_canvas,
     key_pressed,
     alert,
+    set_color,
+    draw_text,
 )
 from src.lib.actor import Arena
 from src.enums import Arena_size, Car_colors
@@ -24,18 +28,30 @@ from src.race import Race
 class SuperSprintGame:
     """
     Game logic: builds the characters from the level configuration file
-    (maps/lvl-N.txt), encapsulates cars and arena, and checks how the race ends.
-    It knows nothing about drawing: that is the job of SuperSprintGui.
+    (maps/lvl-N.txt), encapsulates cars and arena, runs the start countdown
+    and checks how the race ends. It knows nothing about drawing: that is
+    the job of SuperSprintGui.
     """
+    FPS = 30
+    COUNTDOWN_SECONDS = 5
     START_X = 264
     START_Y = 80
     START_Y_GAP = 8
     START_ANGLE = 180
     TOTAL_LAPS = 3
 
+    # WASD set of commands: each key acts as the corresponding arrow key
+    KEY_ALIASES = {
+        "w": "ArrowUp",
+        "a": "ArrowLeft",
+        "s": "ArrowDown",
+        "d": "ArrowRight",
+    }
+
     def __init__(self, level: int = 1):
         self.level = level
         self.arena = Arena(Arena_size.dims.value)
+        self.countdown_frames = self.COUNTDOWN_SECONDS * self.FPS
         self.waypoints = load_waypoints(
             self.level,
             start_pos=(self.START_X, self.START_Y + 12),
@@ -81,6 +97,7 @@ class SuperSprintGame:
             finish=self.finish_line,
             splits=self.splits,
             total_laps=self.TOTAL_LAPS,
+            fps=self.FPS,
             log=self.log,
         )
         self.spawn_actors()
@@ -100,9 +117,38 @@ class SuperSprintGame:
         for car in self.race.cars:
             self.arena.spawn(car)
 
+    @classmethod
+    def map_keys(cls, keys: list[str]) -> list[str]:
+        """Adds the arrow-key equivalent of every WASD key pressed."""
+        mapped = list(keys)
+        for key in keys:
+            alias = cls.KEY_ALIASES.get(key.lower())
+            if alias and alias not in mapped:
+                mapped.append(alias)
+        return mapped
+
+    @property
+    def is_counting_down(self) -> bool:
+        return self.countdown_frames > 0
+
+    @property
+    def countdown_seconds(self) -> int:
+        """Number shown on screen: 5, 4, 3, 2, 1 (0 once the race has started)."""
+        return ceil(self.countdown_frames / self.FPS)
+
+    def go_visible(self) -> bool:
+        """True for the first second of the race, when 'GO!' is shown."""
+        return not self.is_counting_down and self.race.frames < self.FPS
+
     def tick(self, keys: list[str]):
-        """Advances the game by one frame."""
-        self.arena.tick(keys)
+        """
+        Advances the game by one frame. During the countdown the cars stay on the
+        grid and the race clock does not run.
+        """
+        if self.is_counting_down:
+            self.countdown_frames -= 1
+            return
+        self.arena.tick(self.map_keys(keys))
         self.race.update()
 
     def game_over(self) -> bool:
@@ -120,6 +166,7 @@ class SuperSprintGui:
     keyboard input, debug overlay and the tick method.
     """
     DEBUG_WINDOW = 30
+    DEBUG_KEY = "F1"                                    # W is now used to drive
 
     def __init__(self, game: SuperSprintGame):
         self.game = game
@@ -127,18 +174,28 @@ class SuperSprintGui:
         self.debug_frames = 0
         self.debug_keys: set[str] = set()
 
+    def draw_countdown(self):
+        """Big number in the middle of the arena while counting down, then 'GO!'."""
+        if self.game.is_counting_down:
+            set_color((255, 220, 0))
+            draw_text(str(self.game.countdown_seconds), (256, 240), 80)
+        elif self.game.go_visible():
+            set_color((0, 255, 0))
+            draw_text("GO!", (256, 240), 80)
+
     def tick(self):
         clear_canvas()
         init_arena(self.game.level)
 
         cur_keys = current_keys()
-        if key_pressed("w") or key_pressed("W"):
+        if key_pressed(self.DEBUG_KEY):
             self.set_debug(not self.debug_mode)
 
         self.game.tick(cur_keys)
         for actor in self.game.arena.actors():
             draw_actor(actor)
         self.game.race.draw_hud(self.game.player)
+        self.draw_countdown()
 
         if self.debug_mode:
             draw_debug_info(
@@ -163,7 +220,7 @@ class SuperSprintGui:
         self.debug_frames = 0
         self.debug_keys.clear()
         if enabled:
-            print("Debug mode ON  (press W to turn it off)")
+            print(f"Debug mode ON  (press {self.DEBUG_KEY} to turn it off)")
         else:
             print("\nDebug mode OFF")
 
@@ -183,7 +240,7 @@ def main():
     game = SuperSprintGame()
     gui = SuperSprintGui(game)
     init_canvas(Arena_size.dims.value)
-    main_loop(gui.tick)
+    main_loop(gui.tick, SuperSprintGame.FPS)
 
 
 if __name__ == "__main__":
