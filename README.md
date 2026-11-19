@@ -26,8 +26,8 @@ python main.py
 The vehicle is controlled using the keyboard's directional arrow keys:
 
 ```
-Key	            Action
-⬆️ Up Arrow	 Accelerate (Speed ++)
+Key	Action
+⬆️ Up Arrow	Accelerate (Speed ++)
 ⬇️ Down Arrow	Brake / Decelerate (Speed --)
 ⬅️ Left Arrow	Steer Left
 ➡️ Right Arrow	Steer Right
