@@ -43,3 +43,4 @@ Key	Action
 - 🛢️ ***Oil Puddles***: Watch out for oil spills on the asphalt—hitting them will make you lose control and slow you down.
 - 🔧 ***Wrenches***: Collect wrenches scattered across the track to upgrade your car's top speed and performance.
 - 🤖 ***Rival AI***: CPU-controlled cars won't just race against you—they will actively try to grab the wrenches before you do. Stay sharp!- 🤖 ***Rival AI***: CPU-controlled cars won't just race against you—they will actively try to grab the wrenches before you do. Stay sharp!
+- 🤖 ***Rival AI***: CPU-controlled cars won't just race against you—they will actively try to grab the wrenches before you do. Stay sharp!
