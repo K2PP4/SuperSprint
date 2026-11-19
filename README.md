@@ -24,20 +24,18 @@ Start the game by executing the main script from your terminal:
 python main.py
 ```
 
-> ⚠️ **Heads-up:** The race starts **immediately** upon launch! Keep your hands on the keyboard so you don't miss the start.
-
 ---
 
 ## 🎮 Controls
 
-The vehicle is controlled using the keyboard's directional arrow keys:
+The vehicle is controlled using the keyboard's directional arrow keys or "WASD" keys:
 
-| Key | Action |
-| :--- | :--- |
-| **⬆️ Up Arrow** | Accelerate (`Speed ++`) |
-| **⬇️ Down Arrow** | Brake / Decelerate (`Speed --`) |
-| **⬅️ Left Arrow** | Steer Left |
-| **➡️ Right Arrow** | Steer Right |
+| Key | Alt |  Action |
+| :--- | :--- | :--- |
+| **⬆️ Up Arrow** | W | Accelerate (`Speed ++`) |
+| **⬇️ Down Arrow** | S | Brake / Decelerate (`Speed --`) |
+| **⬅️ Left Arrow** | A | Steer Left |
+| **➡️ Right Arrow** | D | Steer Right |
 
 ---
 
