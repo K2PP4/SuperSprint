@@ -2,7 +2,7 @@ from src.lib.g2d import init_canvas, main_loop, current_keys, close_canvas, clea
 from src.lib.actor import Arena, Actor
 from src.enums import Arena_size, Car_colors
 from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
-from src.funcs import draw_actor, init_arena, draw_debug_info, load_waypoints, load_items, load_finish_zone
+from src.funcs import draw_actor, init_arena, draw_debug_info, load_waypoints, load_items, load_gates
 from src.race import Race
 
 arena = Arena(Arena_size.dims.value)
@@ -30,10 +30,10 @@ def grid_pos(slot: int) -> tuple[int, int]:
     return (START_X, START_Y + START_Y_GAP * slot)
 
 # Slot order top to bottom: CPU 1, CPU 2, Player, CPU 3
-cpu_yellow = CpuCar(grid_pos(0), Car_colors.yellow, "CPU 1", waypoints=waypoints, max_speed=9, angle=START_ANGLE)
+cpu_yellow = CpuCar(grid_pos(0), Car_colors.yellow, "CPU 1", waypoints=waypoints, max_speed=5, angle=START_ANGLE)
 cpu_blue   = CpuCar(grid_pos(1), Car_colors.blue,   "CPU 2", waypoints=waypoints, max_speed=4, angle=START_ANGLE)
 p1_car     = UsrCar(grid_pos(2), Car_colors.red,    "Player", angle=START_ANGLE)
-p1_car._max_speed = 4.5             # reduced top speed for the player
+p1_car._max_speed = 5                                 # reduced top speed for the player
 cpu_white  = CpuCar(grid_pos(3), Car_colors.white,  "CPU 3", waypoints=waypoints, max_speed=3, angle=START_ANGLE)
 
 def log(message: str):
@@ -44,10 +44,14 @@ def log(message: str):
     print("\r" + message.ljust(78))
 
 # ── Race: laps, positions, finish order ──
+# Lines drawn across the whole road in the map: 'F' = finish line, 'S' = splits.
+# CPU cars count laps with the waypoints (checkpoints); the player, who cannot follow
+# the racing line exactly, counts them by crossing the splits and then the finish line.
 TOTAL_LAPS = 3
-race = Race([p1_car, cpu_yellow, cpu_blue, cpu_white],
-            checkpoints=waypoints,                      # the CPU waypoints double as checkpoints
-            finish_zone=load_finish_zone(1),            # FL position from the 'F' tile in the map
+finish_line, splits = load_gates(1, waypoints)
+race = Race([cpu_yellow, cpu_blue, p1_car, cpu_white],  # grid order: breaks ties at the start
+            checkpoints=waypoints,
+            finish=finish_line, splits=splits,
             total_laps=TOTAL_LAPS, log=log)
 
 def spawn_items(lvl: int = 1):
@@ -80,7 +84,7 @@ def update_debug_console(keys: list[str]):
     debug_keys.update(keys)
     debug_frames += 1
     if debug_frames % DEBUG_WINDOW == 0:
-        step = (debug_frames // DEBUG_WINDOW - 1) % 3 + 1       # cycles 1, 2, 3 dots
+        step = (debug_frames // DEBUG_WINDOW - 1) % 3 + 1  # cycles 1, 2, 3 dots
         dots = ("." * step).ljust(3)
         pressed = ", ".join(sorted(debug_keys)) or "none"
         line = f"Debug mode running{dots} | keys (last {DEBUG_WINDOW}f): {pressed}"
@@ -116,7 +120,7 @@ def tick():
     race.draw_hud(p1_car)                               # lap / position / time in the top bar
 
     if debug_mode:
-        draw_debug_info(p1_car, lvl=1)
+        draw_debug_info(p1_car, lvl=1, gates=(finish_line, splits))
         update_debug_console(cur_keys)
 
     if "Escape" in cur_keys:

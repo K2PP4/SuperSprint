@@ -31,6 +31,12 @@ WRENCH_SPEED_BONUS  = 0.5                               # max-speed bonus per wr
 MAX_WRENCHES        = 5                                 # wrenches beyond this are collected but give no bonus
 
 class Car(Actor):
+    # How Race counts the laps of this car:
+    #   "checkpoints" = it must pass close to every waypoint, in order (fine for CPU cars)
+    #   "splits"      = it must cross every full-width 'S' line of the map, in order (for humans,
+    #                   who cannot follow the racing line exactly)
+    tracking = "checkpoints"
+
     def __init__(self, pos: tuple[int, int], color: Car_colors, player_name: str = "Default",
                  angle: float = 0.0):
         self._pos               = pos
@@ -46,7 +52,7 @@ class Car(Actor):
         self._angle             = angle                 # heading in degrees (0 = right, 180 = left)
         self._prev_angle        = 0.0
         self._angle_debounce    = 0
-        self._angle_cooldown    = 5
+        self._angle_cooldown    = 10
         self._angle_inc         = 90 / 8
         self._frame             = 0
         self._show              = True
@@ -148,20 +154,14 @@ class Car(Actor):
         img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "super-sprint.png")
         return img_path, (clip_x, clip_y), self._size
 
-    def advance_checkpoint(self):
+    def set_race_progress(self, laps: int, next_gate: int, total_gates: int):
         """
-        Race tracking (called by Race): the next checkpoint of the lap was reached.
+        Race tracking (called by Race): laps completed, index of the next checkpoint/split
+        of the current lap, and total gates passed since the start of the race.
         """
-        self._tot_chkpnt_hit += 1
-        self._target_chkpnt_idx += 1
-
-    def complete_lap(self):
-        """
-        Race tracking (called by Race): the finish line was crossed with all
-        checkpoints hit. Counts the lap and restarts the checkpoint sequence.
-        """
-        self._laps += 1
-        self._target_chkpnt_idx = 0
+        self._laps = laps
+        self._target_chkpnt_idx = next_gate
+        self._tot_chkpnt_hit = total_gates
 
     def finish(self, rank: int):
         """
@@ -194,7 +194,7 @@ class Car(Actor):
             self._prev_pos = self._pos
             self._pos = next_pos
         else:
-            self._speed = 0.0       # backed into another wall: just stop
+            self._speed = 0.0                           # backed into another wall: just stop
         if self._bounce_frames == 0:
             self._speed = 0.0
 
@@ -255,7 +255,7 @@ class Car(Actor):
             self._prev_pos = self._pos
             self._pos = next_pos
         else:
-            self._speed = -self._speed * 0.35   # slide rebounds, no extra lock
+            self._speed = -self._speed * 0.35           # slide rebounds, no extra lock
 
         if self._spin_frames == 0:
             self._angle = self._spin_heading % 360
@@ -264,6 +264,8 @@ class Car(Actor):
         raise NotImplementedError("Abstract method implemented in child classes.")
 
 class UsrCar(Car):
+    tracking = "splits"                                 # human driver: laps are counted with the map's split lines
+
     def __init__(self, pos: Point, color: Car_colors, name: str = "Player", controls: dict = None,
                  angle: float = 0.0):
         super().__init__(pos, color, name, angle)
@@ -329,7 +331,6 @@ class CpuCar(Car):
         super().__init__(pos, color, name, angle)
         self._waypoints = waypoints or []
         self._current_wp_idx = 0
-        
         # "Human error" model: each time the CPU picks a new waypoint it may aim
         # at a nearby wrench (wrench_chance) or, by mistake, at a puddle (oil_chance).
         self._wrench_chance = wrench_chance
@@ -338,7 +339,6 @@ class CpuCar(Car):
         self._wp_offset = (0.0, 0.0)
         self._detour_item = None
         self._detour_age = 0
-
         # Stuck detection: if the car stays near the same spot for too long, reset it
         self._anchor_pos = pos
         self._anchor_frames = 0
@@ -510,7 +510,7 @@ class Item(Actor):
         w, h = size
         self._size = size
         self._pos = (center[0] - w / 2, center[1] - h / 2)
-        self._clip_pos, self._clip_size = clip      # sprite area in super-sprint.png
+        self._clip_pos, self._clip_size = clip          # sprite area in super-sprint.png
 
     def move(self, arena: Arena):
         pass

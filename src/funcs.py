@@ -6,8 +6,8 @@ import os
 _walls_cache: dict[int, list[str]] = {}
 
 # Map characters that are drivable (not walls):
-#   ' ' track, '@' waypoint, 'F' finish line, 'w' wrench, 'p' oil puddle
-_FREE_TILES = (" ", "@", "F", "w", "p")
+#   ' ' track, '@' waypoint, 'F' finish line, 'S' split, 'w' wrench, 'p' oil puddle
+_FREE_TILES = (" ", "@", "F", "S", "w", "p")
 
 def clamp(x, min_val, max_val):
     return max(min_val, min(x, max_val))
@@ -129,7 +129,7 @@ def load_waypoints(lvl: int = 1, start_pos: tuple = None, start_heading: tuple =
         d = (dx ** 2 + dy ** 2) ** 0.5
         if d > 0:
             dot = (dx * start_heading[0] + dy * start_heading[1]) / d
-            if dot > 0.3:  # Waypoint is roughly ahead
+            if dot > 0.3:                               # Waypoint is roughly ahead
                 scored.append((d * (2.0 - dot), p))
     scored.sort(key=lambda x: x[0])
     first_wp = scored[0][1] if scored else raw_wps[0]
@@ -174,24 +174,121 @@ def load_finish_line(lvl: int = 1) -> list[Point]:
     """
     return [(cx - 4, cy - 4) for cx, cy in load_items(lvl, "F")]
 
-def load_finish_zone(lvl: int = 1) -> tuple[float, float, float] | None:
+def load_marked_groups(lvl: int, marker: str) -> list[tuple[int, int, int, int]]:
     """
-    Finds the finish line ('F' in the map) and returns (x, y_top, y_bottom) in pixels:
-    the x of the line, and the vertical extent of the road along that column
-    (from the first wall above to the first wall below). None if the map has no 'F'.
+    Finds the groups of adjacent `marker` tiles in maps/lvl-{lvl}.txt (e.g. one group
+    per finish line 'F' or per split 'S', drawn as a row/column of tiles across the road).
+    Returns one tile bounding box (col_min, row_min, col_max, row_max) per group.
     """
-    centers = load_items(lvl, "F")
-    if not centers:
-        return None
     walls = get_cached_walls(lvl)
-    cx, cy = centers[0]
-    col, row = int(cx // 8), int(cy // 8)
-    top = bottom = row
-    while top > 0 and not is_wall(col, top - 1, walls):
-        top -= 1
-    while not is_wall(col, bottom + 1, walls):
-        bottom += 1
-    return (cx, top * 8, (bottom + 1) * 8)
+    todo = {(c, r) for r, row in enumerate(walls) for c, ch in enumerate(row) if ch == marker}
+    groups = []
+    while todo:
+        stack = [todo.pop()]
+        cols, rows = [], []
+        while stack:
+            c, r = stack.pop()
+            cols.append(c)
+            rows.append(r)
+            for n in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
+                if n in todo:
+                    todo.remove(n)
+                    stack.append(n)
+        groups.append((min(cols), min(rows), max(cols), max(rows)))
+    return sorted(groups, key=lambda g: (g[1], g[0]))
+
+class Gate:
+    """
+    A line drawn across the WHOLE road in the map: 'F' = finish line, 'S' = split.
+    A car crosses it by driving over the line, so (unlike a small checkpoint circle)
+    it cannot be missed. The race direction is read from the waypoint path, so the
+    same class handles vertical lines (a column of tiles) and horizontal ones (a row).
+    """
+    def __init__(self, box: tuple[int, int, int, int], racing_line: list[Point]):
+        c0, r0, c1, r1 = box
+        self.vertical = (r1 - r0) >= (c1 - c0)          # a column of tiles = vertical line
+        if self.vertical:
+            self.line = c0 * 8 + 4                      # x of the line (middle of the tile)
+            self.lo, self.hi = r0 * 8, (r1 + 1) * 8     # y extent of the line
+        else:
+            self.line = r0 * 8 + 4                      # y of the line (middle of the tile)
+            self.lo, self.hi = c0 * 8, (c1 + 1) * 8     # x extent of the line
+        self.sign, self.order = self._direction(racing_line)
+
+    def _across(self, pt: Point) -> float:
+        """Coordinate of `pt` perpendicular to the line (the one that changes when crossing)."""
+        return pt[0] if self.vertical else pt[1]
+
+    def _along(self, pt: Point) -> float:
+        """Coordinate of `pt` along the line."""
+        return pt[1] if self.vertical else pt[0]
+
+    def _direction(self, racing_line: list[Point]) -> tuple[int, float]:
+        """
+        Finds where the waypoint path crosses the line. Returns (sign, order):
+        sign = +1/-1 is the direction of the race across the line (increasing or
+        decreasing coordinate), order = position of the line along the path.
+        """
+        n = len(racing_line)
+        for k in range(n):
+            a, b = racing_line[k], racing_line[(k + 1) % n]
+            pa, pb = self._across(a), self._across(b)
+            if pa == pb or (pa - self.line) * (pb - self.line) > 0:
+                continue                                # this segment does not reach the line
+            t = (self.line - pa) / (pb - pa)
+            along = self._along(a) + t * (self._along(b) - self._along(a))
+            if self.lo <= along < self.hi:
+                return (1 if pb > pa else -1), k + t
+        raise ValueError("A finish/split line is not crossed by the waypoint path: check the map")
+
+    def crossing(self, p: Point, q: Point) -> int:
+        """
+        Movement from p to q: +1 if it crosses the line in the race direction, -1 if it
+        crosses it backwards, 0 if it does not cross it (or crosses outside of the road).
+        """
+        a, b = self._across(p), self._across(q)
+        before, after = (a - self.line) * self.sign, (b - self.line) * self.sign
+        if before < 0 <= after:
+            way = 1
+        elif after < 0 <= before:
+            way = -1
+        else:
+            return 0
+        t = (self.line - a) / (b - a)                   # where, between p and q, the line is hit
+        along = self._along(p) + t * (self._along(q) - self._along(p))
+        return way if self.lo <= along < self.hi else 0
+
+    def draw(self, color: tuple, label: str = ""):
+        """Debug overlay: the line, plus an optional label next to its start."""
+        if self.vertical:
+            start, end = (self.line, self.lo), (self.line, self.hi)
+        else:
+            start, end = (self.lo, self.line), (self.hi, self.line)
+        g2d.set_color(color, 2)
+        g2d.draw_line(start, end, 2)
+        if label:
+            g2d.draw_text(label, (start[0] + 12, start[1] + 8), 12)
+
+def load_gates(lvl: int, racing_line: list[Point]) -> tuple[Gate, list[Gate]]:
+    """
+    Reads the finish line ('F') and the splits ('S') from maps/lvl-{lvl}.txt.
+    Each one is a row/column of tiles across the whole road. Returns (finish, splits),
+    with the splits sorted in lap order (the first one met after the finish line first).
+    racing_line: ordered waypoints, used to find the direction of the race.
+    """
+    finish_boxes = load_marked_groups(lvl, "F")
+    if len(finish_boxes) != 1:
+        raise ValueError(f"The map needs exactly one finish line 'F', found {len(finish_boxes)}")
+    finish = Gate(finish_boxes[0], racing_line)
+    splits = [Gate(box, racing_line) for box in load_marked_groups(lvl, "S")]
+    splits.sort(key=lambda g: (g.order - finish.order) % len(racing_line))
+    return finish, splits
+
+def draw_gates(finish: Gate, splits: list[Gate]):
+    """Debug overlay: finish line in white, splits in cyan (S1, S2, ... in lap order)."""
+    finish.draw((255, 255, 255), "FL")
+    for i, split in enumerate(splits, start=1):
+        split.draw((0, 220, 255), f"S{i}")
 
 def draw_actor(actor: Actor):
     # Cars use the spritesheet; items (wrench, oil) draw themselves.
@@ -209,17 +306,19 @@ def init_arena(lvl: int = 1, size: tuple[int, int] = Arena_size.dims.value):
     clip_y = row * 482
     g2d.draw_image(img_path, (0, 0), (clip_x, clip_y), size)
 
-def draw_debug_info(car: Actor, lvl: int = 1):
+def draw_debug_info(car: Actor, lvl: int = 1, gates: tuple = None):
     # 1. Draw walls overlay
     draw_walls(lvl=lvl, color=(255, 0, 0, 80))
 
-    # 2. Draw waypoints overlay
+    # 2. Draw waypoints overlay, plus the finish line and splits (gates = (finish, splits))
     wps = load_waypoints(lvl)
     for wp in wps:
         g2d.set_color((255, 255, 0), width=0)
         g2d.draw_circle(wp, 3)
         g2d.set_color((255, 255, 0, 150), width=1)
         g2d.draw_circle(wp, 6)
+    if gates:
+        draw_gates(*gates)
 
     # 3. Draw car bounding box (with margin)
     x, y = car.pos()
