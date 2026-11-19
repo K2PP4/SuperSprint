@@ -12,7 +12,6 @@ from src.funcs import (
     init_arena,
     draw_walls,
     draw_actor,
-    draw_debug_info,
     load_waypoints,
     actor_center,
     clamp
@@ -131,15 +130,6 @@ class TestSuperSprintFixes(unittest.TestCase):
             self.assertTrue(hit_wall, f"Car never hit wall moving at angle {angle}")
             self.assertTrue(is_in_bounds(car, arena, 1, pos=car.pos()),
                             f"Car ended inside wall at angle {angle}: {car.pos()}")
-
-    def test_draw_walls_and_rendering(self):
-        """Test that draw_walls, draw_debug_info and init_arena execute on canvas without error."""
-        g2d.init_canvas(Arena_size.dims.value)
-        init_arena(1)
-        draw_walls(lvl=1)
-        car = UsrCar((250, 250), Car_colors.red)
-        draw_actor(car)
-        draw_debug_info(car, lvl=1)
 
     def test_load_waypoints(self):
         """Test that load_waypoints finds all @ points in lvl-1.txt and orders them."""

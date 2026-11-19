@@ -2,7 +2,7 @@ from src.lib.g2d import init_canvas, main_loop, current_keys, close_canvas, clea
 from src.lib.actor import Arena, Actor
 from src.enums import Arena_size, Car_colors
 from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
-from src.funcs import draw_actor, init_arena, draw_debug_info, load_waypoints, load_items, load_gates
+from src.funcs import draw_actor, init_arena, load_waypoints, load_items, load_gates
 from src.race import Race
 
 arena = Arena(Arena_size.dims.value)
@@ -34,6 +34,13 @@ cpu_white  = CpuCar(grid_pos(3), Car_colors.white,  "CPU 3", waypoints=waypoints
 # ── Race: laps, positions, finish order ──
 # Lines drawn across the whole road in the map: 'F' = finish line, 'S' = splits.
 # CPU cars count laps with the waypoints (checkpoints); the player counts them by crossing the splits and then the finish line.
+
+def log(message: str):
+    """
+    Print an event on its own console line. The leading '\\r' and the padding make it
+    safe even while the in-place debug status line is on screen.
+    """
+    print("\r" + message.ljust(78))
 
 finish_line, splits = load_gates(1, waypoints)
 race = Race([cpu_yellow, cpu_blue, p1_car, cpu_white],  # grid order: breaks ties at the start
