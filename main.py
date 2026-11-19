@@ -28,7 +28,7 @@ def grid_pos(slot: int) -> tuple[int, int]:
 cpu_yellow = CpuCar(grid_pos(0), Car_colors.yellow, "CPU 1", waypoints=waypoints, max_speed=5, angle=START_ANGLE)
 cpu_blue   = CpuCar(grid_pos(1), Car_colors.blue,   "CPU 2", waypoints=waypoints, max_speed=4, angle=START_ANGLE)
 p1_car     = UsrCar(grid_pos(2), Car_colors.red,    "Player", angle=START_ANGLE)
-p1_car.max_speed = 5
+p1_car.max_speed = 5 ## FIXME Sistemare velocita massima player
 cpu_white  = CpuCar(grid_pos(3), Car_colors.white,  "CPU 3", waypoints=waypoints, max_speed=3, angle=START_ANGLE)
 
 # ── Race: laps, positions, finish order ──
