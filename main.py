@@ -1,85 +1,247 @@
-from src.lib.g2d import init_canvas, main_loop, current_keys, close_canvas, clear_canvas, key_pressed
-from src.lib.actor import Arena, Actor
+from math import ceil
+
+from src.lib.g2d import (
+    init_canvas,
+    main_loop,
+    current_keys,
+    close_canvas,
+    clear_canvas,
+    key_pressed,
+    alert,
+    set_color,
+    draw_text,
+)
+from src.lib.actor import Arena
 from src.enums import Arena_size, Car_colors
 from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
-from src.funcs import draw_actor, init_arena, load_waypoints, load_items, load_gates
+from src.funcs import (
+    draw_actor,
+    init_arena,
+    draw_debug_info,
+    load_waypoints,
+    load_items,
+    load_gates,
+)
 from src.race import Race
 
-arena = Arena(Arena_size.dims.value)
 
-# ── Starting grid ──
-# The cars drive COUNTER-CLOCKWISE: along the top straight that means heading LEFT
-# (angle 180°). The grid is placed just RIGHT of the finish line (FL, around x=236),
-# so every car starts behind the line and crosses it while driving left.
-START_X     = 264                                       # left edge of the grid, right of the FL
-START_Y     = 80                                        # y of the first car on the top straight
-START_Y_GAP = 8                                         # px between cars (compact, like the arcade)
-START_ANGLE = 180                                       # 180° = facing left, same angle for ALL cars
-TOTAL_LAPS = 3
-
-# Waypoints ('@' in the level map), ordered counter-clockwise starting from the grid
-waypoints = load_waypoints(1, start_pos=(START_X, START_Y + 12), start_heading=(-1.0, 0.0))
-
-def grid_pos(slot: int) -> tuple[int, int]:
-    """Position of the car in the given grid slot (0 = topmost)."""
-    return (START_X, START_Y + START_Y_GAP * slot)
-
-# Slot order top to bottom: CPU 1, CPU 2, Player, CPU 3
-cpu_yellow = CpuCar(grid_pos(0), Car_colors.yellow, "CPU 1", waypoints=waypoints, max_speed=5, angle=START_ANGLE)
-cpu_blue   = CpuCar(grid_pos(1), Car_colors.blue,   "CPU 2", waypoints=waypoints, max_speed=4, angle=START_ANGLE)
-p1_car     = UsrCar(grid_pos(2), Car_colors.red,    "Player", angle=START_ANGLE)
-p1_car.max_speed = 5 ## FIXME Sistemare velocita massima player
-cpu_white  = CpuCar(grid_pos(3), Car_colors.white,  "CPU 3", waypoints=waypoints, max_speed=3, angle=START_ANGLE)
-
-# ── Race: laps, positions, finish order ──
-# Lines drawn across the whole road in the map: 'F' = finish line, 'S' = splits.
-# CPU cars count laps with the waypoints (checkpoints); the player counts them by crossing the splits and then the finish line.
-
-def log(message: str):
+class SuperSprintGame:
     """
-    Print an event on its own console line. The leading '\\r' and the padding make it
-    safe even while the in-place debug status line is on screen.
+    Game logic: builds the characters from the level configuration file
+    (maps/lvl-N.txt), encapsulates cars and arena, runs the start countdown
+    and checks how the race ends. It knows nothing about drawing: that is
+    the job of SuperSprintGui.
     """
-    print("\r" + message.ljust(78))
+    FPS = 30
+    COUNTDOWN_SECONDS = 5
+    START_X = 264
+    START_Y = 80
+    START_Y_GAP = 8
+    START_ANGLE = 180
+    TOTAL_LAPS = 3
 
-finish_line, splits = load_gates(1, waypoints)
-race = Race([cpu_yellow, cpu_blue, p1_car, cpu_white],  # grid order: breaks ties at the start
-            checkpoints=waypoints,
-            finish=finish_line, splits=splits,
-            total_laps=TOTAL_LAPS, log=log)
+    # WASD set of commands: each key acts as the corresponding arrow key
+    KEY_ALIASES = {
+        "w": "ArrowUp",
+        "a": "ArrowLeft",
+        "s": "ArrowDown",
+        "d": "ArrowRight",
+    }
 
-def spawn_items(lvl: int = 1):
-    """Create wrenches ('w') and oil puddles ('p') from the level map."""
-    for c in load_items(lvl, "w"):
-        arena.spawn(Wrench(c))
-    for c in load_items(lvl, "p"):
-        arena.spawn(OilPuddle(c))
+    def __init__(self, level: int = 1):
+        self.level = level
+        self.arena = Arena(Arena_size.dims.value)
+        self.countdown_frames = self.COUNTDOWN_SECONDS * self.FPS
+        self.waypoints = load_waypoints(
+            self.level,
+            start_pos=(self.START_X, self.START_Y + 12),
+            start_heading=(-1.0, 0.0),
+        )
+
+        self.cpu_yellow = CpuCar(
+            self.grid_pos(0),
+            Car_colors.yellow,
+            "CPU 1",
+            waypoints=self.waypoints,
+            max_speed=5,
+            angle=self.START_ANGLE,
+        )
+        self.cpu_blue = CpuCar(
+            self.grid_pos(1),
+            Car_colors.blue,
+            "CPU 2",
+            waypoints=self.waypoints,
+            max_speed=4,
+            angle=self.START_ANGLE,
+        )
+        self.player = UsrCar(
+            self.grid_pos(2),
+            Car_colors.red,
+            "Player",
+            angle=self.START_ANGLE,
+        )
+        self.player.max_speed(5)
+        self.cpu_white = CpuCar(
+            self.grid_pos(3),
+            Car_colors.white,
+            "CPU 3",
+            waypoints=self.waypoints,
+            max_speed=3,
+            angle=self.START_ANGLE,
+        )
+
+        self.finish_line, self.splits = load_gates(self.level, self.waypoints)
+        self.race = Race(
+            [self.cpu_yellow, self.cpu_blue, self.player, self.cpu_white],
+            checkpoints=self.waypoints,
+            finish=self.finish_line,
+            splits=self.splits,
+            total_laps=self.TOTAL_LAPS,
+            fps=self.FPS,
+            log=self.log,
+        )
+        self.spawn_actors()
+
+    def grid_pos(self, slot: int) -> tuple[int, int]:
+        return (self.START_X, self.START_Y + self.START_Y_GAP * slot)
+
+    def log(self, message: str):
+        print("\r" + message.ljust(78))
+
+    def spawn_actors(self):
+        """Puts items (from the map file) and cars into the arena."""
+        for center in load_items(self.level, "w"):
+            self.arena.spawn(Wrench(center))
+        for center in load_items(self.level, "p"):
+            self.arena.spawn(OilPuddle(center))
+        for car in self.race.cars:
+            self.arena.spawn(car)
+
+    @classmethod
+    def map_keys(cls, keys: list[str]) -> list[str]:
+        """Adds the arrow-key equivalent of every WASD key pressed."""
+        mapped = list(keys)
+        for key in keys:
+            alias = cls.KEY_ALIASES.get(key.lower())
+            if alias and alias not in mapped:
+                mapped.append(alias)
+        return mapped
+
+    @property
+    def is_counting_down(self) -> bool:
+        return self.countdown_frames > 0
+
+    @property
+    def countdown_seconds(self) -> int:
+        """Number shown on screen: 5, 4, 3, 2, 1 (0 once the race has started)."""
+        return ceil(self.countdown_frames / self.FPS)
+
+    def go_visible(self) -> bool:
+        """True for the first second of the race, when 'GO!' is shown."""
+        return not self.is_counting_down and self.race.frames < self.FPS
+
+    def tick(self, keys: list[str]):
+        """
+        Advances the game by one frame. During the countdown the cars stay on the
+        grid and the race clock does not run.
+        """
+        if self.is_counting_down:
+            self.countdown_frames -= 1
+            return
+        self.arena.tick(self.map_keys(keys))
+        self.race.update()
+
+    def game_over(self) -> bool:
+        """The game ends when the player completes the race."""
+        return self.player.is_finished
+
+    def game_won(self) -> bool:
+        """Positive conclusion: the player finished first."""
+        return self.player.is_finished and self.player.finish_rank == 1
+
+
+class SuperSprintGui:
+    """
+    Representation of the game: drawing (images and g2d functions),
+    keyboard input, debug overlay and the tick method.
+    """
+    DEBUG_WINDOW = 30
+    DEBUG_KEY = "F1"                                    # W is now used to drive
+
+    def __init__(self, game: SuperSprintGame):
+        self.game = game
+        self.debug_mode = False
+        self.debug_frames = 0
+        self.debug_keys: set[str] = set()
+
+    def draw_countdown(self):
+        """Big number in the middle of the arena while counting down, then 'GO!'."""
+        if self.game.is_counting_down:
+            set_color((255, 220, 0))
+            draw_text(str(self.game.countdown_seconds), (256, 240), 80)
+        elif self.game.go_visible():
+            set_color((0, 255, 0))
+            draw_text("GO!", (256, 240), 80)
+
+    def tick(self):
+        clear_canvas()
+        init_arena(self.game.level)
+
+        cur_keys = current_keys()
+        if key_pressed(self.DEBUG_KEY):
+            self.set_debug(not self.debug_mode)
+
+        self.game.tick(cur_keys)
+        for actor in self.game.arena.actors():
+            draw_actor(actor)
+        self.game.race.draw_hud(self.game.player)
+        self.draw_countdown()
+
+        if self.debug_mode:
+            draw_debug_info(
+                self.game.player,
+                lvl=self.game.level,
+                gates=(self.game.finish_line, self.game.splits),
+            )
+            self.update_debug_console(cur_keys)
+
+        if self.game.game_over():
+            if self.game.game_won():
+                alert("You win!")
+            else:
+                alert("Race finished, better luck next time!")
+            close_canvas()
+
+        if "Escape" in cur_keys:
+            close_canvas()
+
+    def set_debug(self, enabled: bool):
+        self.debug_mode = enabled
+        self.debug_frames = 0
+        self.debug_keys.clear()
+        if enabled:
+            print(f"Debug mode ON  (press {self.DEBUG_KEY} to turn it off)")
+        else:
+            print("\nDebug mode OFF")
+
+    def update_debug_console(self, keys: list[str]):
+        self.debug_keys.update(keys)
+        self.debug_frames += 1
+        if self.debug_frames % self.DEBUG_WINDOW == 0:
+            step = (self.debug_frames // self.DEBUG_WINDOW - 1) % 3 + 1
+            dots = ("." * step).ljust(3)
+            pressed = ", ".join(sorted(self.debug_keys)) or "none"
+            line = f"Debug mode running{dots} | keys (last {self.DEBUG_WINDOW}f): {pressed}"
+            print("\r" + line.ljust(78), end="", flush=True)
+            self.debug_keys.clear()
+
 
 def main():
-    init_canvas(Arena_size.dims.value, 2)
-    spawn_items(1)                                      # items first: actors are drawn in spawn order, so cars end up on top
-    arena.spawn(p1_car)
-    arena.spawn(cpu_yellow)
-    arena.spawn(cpu_blue)
-    arena.spawn(cpu_white)
-    main_loop(tick)
+    game = SuperSprintGame()
+    gui = SuperSprintGui(game)
+    init_canvas(Arena_size.dims.value)
+    main_loop(gui.tick, SuperSprintGame.FPS)
 
-def tick():
-    # Redraw the background (track) every frame
-    clear_canvas()
-    init_arena(1)
-
-    cur_keys = current_keys()
-
-    # Advance the game one frame and draw every actor
-    arena.tick(cur_keys)
-    race.update()                                       # checkpoints, lap counting, finish order
-    for a in arena.actors():
-        draw_actor(a)
-    race.draw_hud(p1_car)                               # lap / position / time in the top bar
-
-    if "Escape" in cur_keys:
-        close_canvas()
 
 if __name__ == "__main__":
     print("Started main (main.py)")

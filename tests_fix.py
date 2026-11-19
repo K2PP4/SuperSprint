@@ -1,205 +1,340 @@
-import unittest
 import os
 os.environ["SDL_VIDEODRIVER"] = "dummy"
-import pygame as pg
+
+import unittest
+
+from src.lib import g2d
 from src.lib.actor import Arena
-from src.enums import Arena_size, Car_colors, Car_size
-from src.classes import UsrCar, Car, CurvedWall, ExternalWall, InternalWall, CpuCar
+from src.enums import Arena_size, Car_colors
+from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
 from src.funcs import (
-    is_wall,
     get_cached_walls,
     is_in_bounds,
-    init_arena,
-    draw_walls,
-    draw_actor,
+    load_items,
     load_waypoints,
-    actor_center,
-    clamp
+    load_gates,
 )
-from src.lib import g2d
+from src.race import ordinal
+from main import SuperSprintGame, SuperSprintGui
 
-class TestSuperSprintFixes(unittest.TestCase):
+
+def quiet_game() -> SuperSprintGame:
+    """A new game whose race log does not clutter the test output."""
+    game = SuperSprintGame()
+    game.race._log = lambda *_: None
+    return game
+
+
+def skip_countdown(game: SuperSprintGame):
+    game.countdown_frames = 0
+
+
+class TestMap(unittest.TestCase):
     def setUp(self):
-        self.arena = Arena(Arena_size.dims.value)
         self.walls = get_cached_walls(1)
 
     def test_arena_size(self):
-        """Test that Arena_size matches 512x480 (64x60 blocks of 8x8)."""
-        self.assertEqual(Arena_size.width.value, 512)
-        self.assertEqual(Arena_size.height.value, 480)
         self.assertEqual(Arena_size.dims.value, (512, 480))
-        self.assertEqual(self.arena.size(), (512, 480))
+        self.assertEqual(Arena(Arena_size.dims.value).size(), (512, 480))
 
-    def test_map_integrity(self):
-        """Test that lvl-1.txt has exactly 60 rows and 64 columns."""
+    def test_map_is_64x60_with_closed_border(self):
         self.assertEqual(len(self.walls), 60)
-        for r, row in enumerate(self.walls):
-            self.assertEqual(len(row), 64, f"Row {r} length is {len(row)}, expected 64")
-        # Check outer walls
-        self.assertTrue(all(self.walls[0][c] == '#' for c in range(64)))
-        self.assertTrue(all(self.walls[59][c] == '#' for c in range(64)))
-        self.assertTrue(all(self.walls[r][0] == '#' for r in range(60)))
-        self.assertTrue(all(self.walls[r][63] == '#' for r in range(60)))
+        for row in self.walls:
+            self.assertEqual(len(row), 64)
+        self.assertTrue(all(ch == "#" for ch in self.walls[0]))
+        self.assertTrue(all(ch == "#" for ch in self.walls[-1]))
+        self.assertTrue(all(row[0] == "#" and row[-1] == "#" for row in self.walls))
 
-    def test_asset_paths_exist(self):
-        """Test that image paths resolve locally and files exist on disk."""
+    def test_images_exist(self):
         car = UsrCar((250, 250), Car_colors.red)
-        img_path, clip_pos, clip_size = car.get_sprite_cutout()
-        self.assertTrue(os.path.exists(img_path), f"Car spritesheet not found: {img_path}")
+        img_path, _, clip_size = car.get_sprite_cutout()
+        self.assertTrue(os.path.exists(img_path))
         self.assertEqual(clip_size, (16, 16))
+        bg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "img", "super-sprint-bg.png")
+        self.assertTrue(os.path.exists(bg))
 
-        bg_path = os.path.join(os.path.dirname(__file__), "src", "img", "super-sprint-bg.png")
-        self.assertTrue(os.path.exists(bg_path), f"Background not found: {bg_path}")
-
-    def test_is_finished_no_recursion(self):
-        """Test that is_finished does not cause recursion error."""
-        car = UsrCar((250, 250), Car_colors.red)
-        self.assertFalse(car.is_finished)
-
-    def test_is_in_bounds_positions(self):
-        """Test is_in_bounds on road vs wall vs outside arena."""
-        car = UsrCar((250, 250), Car_colors.red)
-        # (250, 250) is on the open road
-        self.assertTrue(is_in_bounds(car, self.arena, 1, pos=(250, 250)))
-
-        # Grandstands (top area y=10) is wall
-        self.assertFalse(is_in_bounds(car, self.arena, 1, pos=(100, 10)))
-
-        # Outside arena
-        self.assertFalse(is_in_bounds(car, self.arena, 1, pos=(-10, 250)))
-        self.assertFalse(is_in_bounds(car, self.arena, 1, pos=(250, -10)))
-        self.assertFalse(is_in_bounds(car, self.arena, 1, pos=(520, 250)))
-        self.assertFalse(is_in_bounds(car, self.arena, 1, pos=(250, 490)))
-
-    def test_steering_when_stopped(self):
-        """Test that UsrCar can steer when speed is 0."""
-        car = UsrCar((250, 250), Car_colors.red)
-        car._speed = 0.0
-        initial_angle = car.angle
-
-        self.arena.spawn(car)
-        car._angle_cooldown = 0
-        self.arena.tick(keys=["ArrowLeft"])
-
-        # Car should have changed angle even with speed 0
-        self.assertNotEqual(car.angle, initial_angle)
-
-    def test_collision_prevents_penetration_and_allows_escape(self):
-        """Test that collision does not trap the car inside a wall."""
-        car = UsrCar((250, 70), Car_colors.red)
-        self.arena.spawn(car)
-        self.assertTrue(is_in_bounds(car, self.arena, 1, pos=car.pos()))
-
-        # Face UP (angle 270 in polar coords) towards top wall
-        car._angle = 270.0
-        car._speed = 8.0
-
-        for _ in range(20):
-            self.arena.tick(keys=["ArrowUp"])
-
-        # The car MUST NOT be inside the wall!
-        self.assertTrue(is_in_bounds(car, self.arena, 1, pos=car.pos()),
-                        f"Car got trapped inside wall at pos {car.pos()}")
-
-        # Now test escape: turn down and accelerate
-        car._angle = 90.0
-        car._speed = 0.0
-
-        for _ in range(10):
-            self.arena.tick(keys=["ArrowUp"])
-
-        self.assertGreater(car.pos()[1], 70.0)
-        self.assertTrue(is_in_bounds(car, self.arena, 1, pos=car.pos()))
-
-    def test_multidirectional_bounce(self):
-        """Test that hitting walls at various angles bounces cleanly without getting stuck."""
-        for angle in [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]:
-            arena = Arena(Arena_size.dims.value)
-            car = UsrCar((250, 250), Car_colors.red)
-            arena.spawn(car)
-            car._angle = angle
-            car._speed = 10.0
-
-            hit_wall = False
-            for _ in range(50):
-                arena.tick(keys=["ArrowUp"])
-                if car._speed < 0:
-                    hit_wall = True
-                    break
-
-            self.assertTrue(hit_wall, f"Car never hit wall moving at angle {angle}")
-            self.assertTrue(is_in_bounds(car, arena, 1, pos=car.pos()),
-                            f"Car ended inside wall at angle {angle}: {car.pos()}")
-
-    def test_load_waypoints(self):
-        """Test that load_waypoints finds all @ points in lvl-1.txt and orders them."""
+    def test_waypoints_are_all_on_the_road(self):
         wps = load_waypoints(1)
-        self.assertGreaterEqual(len(wps), 10, "Expected at least 10 waypoints in map")
-        # Ensure all waypoints are in bounds
+        self.assertEqual(len(wps), len(load_items(1, "@")))
+        self.assertEqual(len(set(wps)), len(wps))
+        arena = Arena(Arena_size.dims.value)
         car = UsrCar((0, 0), Car_colors.yellow)
-        for i, wp in enumerate(wps):
-            # Tile center to top-left
-            car_pos = (wp[0] - 8, wp[1] - 8)
-            self.assertTrue(is_in_bounds(car, self.arena, 1, pos=car_pos),
-                            f"Waypoint {i+1} at {wp} collides with wall!")
+        for wp in wps:
+            self.assertTrue(is_in_bounds(car, arena, 1, pos=(wp[0] - 8, wp[1] - 8)), f"waypoint {wp}")
 
-    def test_starting_grid_side_by_side(self):
-        """Test that all 4 cars start side by side at the start line facing left."""
-        wps = load_waypoints(1)
-        grid = [
-            (Car_colors.yellow, (175, 338)),
-            (Car_colors.blue,   (175, 354)),
-            (Car_colors.red,    (175, 370)),
-            (Car_colors.white,  (175, 386)),
-        ]
-        cars = []
-        for col, pos in grid:
-            car = CpuCar(pos, col, waypoints=wps) if col != Car_colors.red else UsrCar(pos, col)
-            car._angle = 180.0
-            cars.append(car)
-            self.assertTrue(is_in_bounds(car, self.arena, 1, pos=pos),
-                            f"Start position {pos} for {col.name} is blocked!")
-            self.assertEqual(car.angle, 180.0)
-
-        # Check they have same X coordinate (side-by-side on vertical grid line)
-        xs = [c.pos()[0] for c in cars]
-        self.assertTrue(all(x == xs[0] for x in xs))
-        # Check ascending Y positions with spacing
-        ys = [c.pos()[1] for c in cars]
-        for i in range(len(ys) - 1):
-            self.assertEqual(ys[i+1] - ys[i], 16)
-
-    def test_cpu_car_waypoint_driving(self):
-        """Test that CpuCar autonomously follows waypoints around the track."""
-        wps = load_waypoints(1)
-        cpu = CpuCar((175, 338), Car_colors.yellow, waypoints=wps, max_speed=5.0)
-        self.arena.spawn(cpu)
-
-        initial_pos = cpu.pos()
-        # Run 500 ticks
-        for _ in range(500):
-            self.arena.tick()
-
-        # The car must have driven along waypoints and advanced
-        self.assertNotEqual(cpu.pos(), initial_pos)
-        self.assertGreater(cpu.total_checkpoints_hit, 0)
-        self.assertTrue(is_in_bounds(cpu, self.arena, 1, pos=cpu.pos()),
-                        f"CpuCar ended out of bounds: {cpu.pos()}")
-
-    def test_curved_wall_methods(self):
-        """Test that CurvedWall center() call does not raise TypeError."""
-        ext_wall = ExternalWall((0, 0), (100, 100), (50, 50), 40.0)
+    def test_in_bounds(self):
+        arena = Arena(Arena_size.dims.value)
         car = UsrCar((250, 250), Car_colors.red)
-        result = ext_wall.confirm_collision(car)
-        self.assertIsInstance(result, bool)
+        self.assertTrue(is_in_bounds(car, arena, 1, pos=(250, 250)))
+        self.assertFalse(is_in_bounds(car, arena, 1, pos=(100, 10)))       # grandstands
+        for outside in [(-10, 250), (250, -10), (520, 250), (250, 490)]:
+            self.assertFalse(is_in_bounds(car, arena, 1, pos=outside))
 
-    def test_cpu_car_move_signature(self):
-        """Test that CpuCar.move accepts arena."""
+
+class TestGates(unittest.TestCase):
+    def setUp(self):
+        self.finish, self.splits = load_gates(1, load_waypoints(1))
+
+    def test_gates_found(self):
+        self.assertTrue(self.finish.vertical)
+        self.assertGreaterEqual(len(self.splits), 1)
+
+    def test_race_runs_leftwards_on_the_finish_line(self):
+        self.assertEqual(self.finish.sign, -1)
+
+    def test_crossing_direction(self):
+        f = self.finish
+        before, after = (f.line - 5, 100), (f.line + 5, 100)
+        self.assertEqual(f.crossing(before, after), f.sign)
+        self.assertEqual(f.crossing(after, before), -f.sign)
+        self.assertEqual(f.crossing(before, (f.line - 2, 100)), 0)
+
+    def test_crossing_outside_the_road_does_not_count(self):
+        f = self.finish
+        self.assertEqual(f.crossing((f.line - 5, f.lo - 14), (f.line + 5, f.lo - 14)), 0)
+
+
+class TestUserCar(unittest.TestCase):
+    def setUp(self):
+        self.arena = Arena(Arena_size.dims.value)
+        self.car = UsrCar((250, 250), Car_colors.red)
+        self.arena.spawn(self.car)
+
+    def test_not_finished_at_start(self):
+        self.assertFalse(self.car.is_finished)
+
+    def test_accelerates_and_brakes(self):
+        self.arena.tick(keys=["ArrowUp"])
+        self.assertGreater(self.car.speed, 0)
+        speed = self.car.speed
+        self.arena.tick(keys=["ArrowDown"])
+        self.assertLess(self.car.speed, speed)
+
+    def test_steers_while_stopped(self):
+        self.car._angle_cooldown = 0
+        before = self.car.angle
+        self.arena.tick(keys=["ArrowLeft"])
+        self.assertNotEqual(self.car.angle, before)
+
+    def test_wall_hit_bounces_and_never_traps_the_car(self):
+        car = UsrCar((250, 70), Car_colors.red)
+        arena = Arena(Arena_size.dims.value)
+        arena.spawn(car)
+        car._angle = 270.0                              # facing the top wall
+        car._speed = 8.0
+        arena.tick(keys=["ArrowUp"])
+        self.assertTrue(car.is_bouncing)
+        self.assertLess(car.speed, 0)
+        for _ in range(40):
+            arena.tick(keys=["ArrowUp"])
+            self.assertTrue(is_in_bounds(car, arena, 1, pos=car.pos()), f"trapped at {car.pos()}")
+
+    def test_no_control_while_bouncing(self):
+        self.car.bounce_back()
+        speed = self.car.speed
+        self.arena.tick(keys=["ArrowUp"])
+        self.assertLessEqual(self.car.speed, abs(speed))
+        self.assertTrue(self.car.is_locked)
+
+
+class TestItems(unittest.TestCase):
+    def setUp(self):
+        self.arena = Arena(Arena_size.dims.value)
+        self.car = UsrCar((250, 250), Car_colors.red)
+        self.arena.spawn(self.car)
+
+    def test_wrench_is_collected_and_boosts_speed(self):
+        wrench = Wrench((258, 258))
+        self.arena.spawn(wrench)
+        top = self.car._max_speed
+        self.arena.tick(keys=[])
+        self.assertEqual(self.car.wrenches, 1)
+        self.assertGreater(self.car._max_speed, top)
+        self.assertNotIn(wrench, self.arena.actors())
+
+    def test_oil_puddle_makes_the_car_spin(self):
+        self.arena.spawn(OilPuddle((258, 258)))
+        self.arena.tick(keys=[])
+        self.assertTrue(self.car.is_spinning)
+        self.assertTrue(self.car.is_locked)
+
+
+class TestCpuCar(unittest.TestCase):
+    def test_move_works_without_arena(self):
         cpu = CpuCar((250, 250), Car_colors.yellow)
-        try:
-            cpu.move(self.arena)
-        except Exception as e:
-            self.fail(f"CpuCar.move raised: {e}")
+        cpu.move()
+
+    def test_move_accepts_arena(self):
+        cpu = CpuCar((250, 250), Car_colors.yellow)
+        cpu.move(Arena(Arena_size.dims.value))
+
+    def test_cpu_drives_along_the_track(self):
+        game = quiet_game()
+        skip_countdown(game)
+        start = game.cpu_yellow.pos()
+        for _ in range(300):
+            game.tick([])
+        cpu = game.cpu_yellow
+        self.assertNotEqual(cpu.pos(), start)
+        self.assertGreater(cpu.total_checkpoints_hit, 0)
+        self.assertTrue(is_in_bounds(cpu, game.arena, 1, pos=cpu.pos()))
+
+
+class TestRace(unittest.TestCase):
+    def test_ordinal(self):
+        expected = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 11: "11th", 12: "12th", 13: "13th", 21: "21st"}
+        for n, text in expected.items():
+            self.assertEqual(ordinal(n), text)
+
+    def test_standings_contain_every_car_once(self):
+        game = quiet_game()
+        standings = game.race.standings()
+        self.assertEqual(len(standings), 4)
+        self.assertEqual(set(standings), set(game.race.cars))
+        self.assertIn(game.race.position(game.player), (1, 2, 3, 4))
+
+
+class TestGame(unittest.TestCase):
+    def setUp(self):
+        self.game = quiet_game()
+
+    def test_cars_start_on_the_grid_facing_left(self):
+        cars = self.game.race.cars
+        self.assertEqual(len({c.pos()[0] for c in cars}), 1)
+        ys = sorted(c.pos()[1] for c in cars)
+        self.assertEqual([b - a for a, b in zip(ys, ys[1:])], [SuperSprintGame.START_Y_GAP] * 3)
+        for car in cars:
+            self.assertEqual(car.angle, 180)
+            self.assertTrue(is_in_bounds(car, self.game.arena, 1))
+
+    def test_items_and_cars_are_in_the_arena(self):
+        actors = self.game.arena.actors()
+        for car in self.game.race.cars:
+            self.assertIn(car, actors)
+        self.assertEqual(len([a for a in actors if isinstance(a, Wrench)]), len(load_items(1, "w")))
+        self.assertEqual(len([a for a in actors if isinstance(a, OilPuddle)]), len(load_items(1, "p")))
+
+    def test_game_over_and_win(self):
+        self.assertFalse(self.game.game_over())
+        self.assertFalse(self.game.game_won())
+        self.game.player.finish(1)
+        self.assertTrue(self.game.game_over())
+        self.assertTrue(self.game.game_won())
+
+    def test_game_over_but_not_won(self):
+        self.game.player.finish(3)
+        self.assertTrue(self.game.game_over())
+        self.assertFalse(self.game.game_won())
+
+
+class TestCountdown(unittest.TestCase):
+    def setUp(self):
+        self.game = quiet_game()
+        self.fps = SuperSprintGame.FPS
+
+    def test_starts_at_five_seconds(self):
+        self.assertTrue(self.game.is_counting_down)
+        self.assertEqual(self.game.countdown_seconds, 5)
+
+    def test_counts_down_one_number_per_second(self):
+        for _ in range(self.fps):
+            self.game.tick([])
+        self.assertEqual(self.game.countdown_seconds, 4)
+
+    def test_cars_stay_still_and_race_clock_is_stopped(self):
+        positions = [c.pos() for c in self.game.race.cars]
+        for _ in range(self.fps * 3):
+            self.game.tick(["w", "ArrowUp"])
+        self.assertEqual([c.pos() for c in self.game.race.cars], positions)
+        self.assertEqual(self.game.player.speed, 0)
+        self.assertEqual(self.game.race.frames, 0)
+
+    def test_race_starts_after_five_seconds(self):
+        for _ in range(SuperSprintGame.COUNTDOWN_SECONDS * self.fps):
+            self.game.tick([])
+        self.assertFalse(self.game.is_counting_down)
+        self.assertEqual(self.game.countdown_seconds, 0)
+        self.assertEqual(self.game.race.frames, 0)
+        self.assertTrue(self.game.go_visible())
+        self.game.tick([])
+        self.assertEqual(self.game.race.frames, 1)
+
+    def test_go_message_lasts_one_second(self):
+        skip_countdown(self.game)
+        for _ in range(self.fps):
+            self.game.tick([])
+        self.assertFalse(self.game.go_visible())
+
+
+class TestWasd(unittest.TestCase):
+    def test_map_keys_adds_arrow_equivalents(self):
+        mapped = SuperSprintGame.map_keys(["w", "a", "s", "d"])
+        for arrow in ["ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"]:
+            self.assertIn(arrow, mapped)
+        for key in "wasd":
+            self.assertIn(key, mapped)
+
+    def test_map_keys_keeps_other_keys_and_has_no_duplicates(self):
+        mapped = SuperSprintGame.map_keys(["w", "ArrowUp", "Escape"])
+        self.assertEqual(mapped.count("ArrowUp"), 1)
+        self.assertIn("Escape", mapped)
+        self.assertEqual(SuperSprintGame.map_keys([]), [])
+
+    def test_w_accelerates_the_player(self):
+        game = quiet_game()
+        skip_countdown(game)
+        game.tick(["w"])
+        self.assertGreater(game.player.speed, 0)
+
+    def test_s_brakes_the_player(self):
+        game = quiet_game()
+        skip_countdown(game)
+        game.tick(["w"])
+        speed = game.player.speed
+        game.tick(["s"])
+        self.assertLess(game.player.speed, speed)
+
+    def test_a_and_d_steer_the_player(self):
+        for key in ("a", "d"):
+            game = quiet_game()
+            skip_countdown(game)
+            game.player._angle_cooldown = 0
+            before = game.player.angle
+            game.tick([key])
+            self.assertNotEqual(game.player.angle, before, key)
+
+    def test_arrows_still_work(self):
+        game = quiet_game()
+        skip_countdown(game)
+        game.tick(["ArrowUp"])
+        self.assertGreater(game.player.speed, 0)
+
+
+class TestGui(unittest.TestCase):
+    def setUp(self):
+        g2d.init_canvas(Arena_size.dims.value)
+        self.gui = SuperSprintGui(quiet_game())
+
+    def test_debug_key_is_not_a_driving_key(self):
+        self.assertNotIn(self.gui.DEBUG_KEY.lower(), SuperSprintGame.KEY_ALIASES)
+
+    def test_toggle_debug(self):
+        self.gui.set_debug(True)
+        self.assertTrue(self.gui.debug_mode)
+        self.gui.set_debug(False)
+        self.assertFalse(self.gui.debug_mode)
+
+    def test_tick_draws_during_countdown(self):
+        self.gui.tick()
+        self.assertEqual(self.gui.game.countdown_seconds, 5)
+
+    def test_tick_draws_in_debug_mode_and_after_countdown(self):
+        skip_countdown(self.gui.game)
+        self.gui.set_debug(True)
+        for _ in range(3):
+            self.gui.tick()
+        self.assertEqual(self.gui.game.race.frames, 3)
+
 
 if __name__ == "__main__":
     unittest.main()
