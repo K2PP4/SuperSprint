@@ -276,6 +276,9 @@ class UsrCar(Car):
             "sx": "ArrowLeft"
         }
 
+    def max_speed(self, mspeed: int):
+        self._max_speed = mspeed
+
     def move(self, arena: Arena):
         if self._is_finished:
             return
