@@ -7,12 +7,6 @@ from src.race import Race
 
 arena = Arena(Arena_size.dims.value)
 
-# ── Debug mode state ──
-DEBUG_WINDOW = 30                                       # frames between console updates
-debug_mode = False
-debug_frames = 0                                        # frames elapsed since debug mode was enabled
-debug_keys: set[str] = set()                            # keys seen during the current 30-frame window
-
 # ── Starting grid ──
 # The cars drive COUNTER-CLOCKWISE: along the top straight that means heading LEFT
 # (angle 180°). The grid is placed just RIGHT of the finish line (FL, around x=236),
@@ -21,6 +15,7 @@ START_X     = 264                                       # left edge of the grid,
 START_Y     = 80                                        # y of the first car on the top straight
 START_Y_GAP = 8                                         # px between cars (compact, like the arcade)
 START_ANGLE = 180                                       # 180° = facing left, same angle for ALL cars
+TOTAL_LAPS = 3
 
 # Waypoints ('@' in the level map), ordered counter-clockwise starting from the grid
 waypoints = load_waypoints(1, start_pos=(START_X, START_Y + 12), start_heading=(-1.0, 0.0))
@@ -36,18 +31,10 @@ p1_car     = UsrCar(grid_pos(2), Car_colors.red,    "Player", angle=START_ANGLE)
 p1_car.max_speed = 5
 cpu_white  = CpuCar(grid_pos(3), Car_colors.white,  "CPU 3", waypoints=waypoints, max_speed=3, angle=START_ANGLE)
 
-def log(message: str):
-    """
-    Print an event on its own console line. The leading '\\r' and the padding make it
-    safe even while the in-place debug status line is on screen.
-    """
-    print("\r" + message.ljust(78))
-
 # ── Race: laps, positions, finish order ──
 # Lines drawn across the whole road in the map: 'F' = finish line, 'S' = splits.
-# CPU cars count laps with the waypoints (checkpoints); the player, who cannot follow
-# the racing line exactly, counts them by crossing the splits and then the finish line.
-TOTAL_LAPS = 3
+# CPU cars count laps with the waypoints (checkpoints); the player counts them by crossing the splits and then the finish line.
+
 finish_line, splits = load_gates(1, waypoints)
 race = Race([cpu_yellow, cpu_blue, p1_car, cpu_white],  # grid order: breaks ties at the start
             checkpoints=waypoints,
@@ -61,39 +48,8 @@ def spawn_items(lvl: int = 1):
     for c in load_items(lvl, "p"):
         arena.spawn(OilPuddle(c))
 
-def set_debug(enabled: bool):
-    """Turn debug mode on/off and reset the console counters."""
-    global debug_mode, debug_frames
-    debug_mode = enabled
-    debug_frames = 0
-    debug_keys.clear()
-    if enabled:
-        print("Debug mode ON  (press W to turn it off)")
-    else:
-        print("\nDebug mode OFF")
-
-def update_debug_console(keys: list[str]):
-    """
-    Called once per frame while debug mode is on. Collects the keys pressed and,
-    every DEBUG_WINDOW frames, redraws a single console line in place, CLI-spinner style:
-        Debug mode running.   | keys (last 30f): ArrowUp, ArrowLeft
-        Debug mode running..  | ...
-        Debug mode running... | ...
-    """
-    global debug_frames
-    debug_keys.update(keys)
-    debug_frames += 1
-    if debug_frames % DEBUG_WINDOW == 0:
-        step = (debug_frames // DEBUG_WINDOW - 1) % 3 + 1  # cycles 1, 2, 3 dots
-        dots = ("." * step).ljust(3)
-        pressed = ", ".join(sorted(debug_keys)) or "none"
-        line = f"Debug mode running{dots} | keys (last {DEBUG_WINDOW}f): {pressed}"
-        # '\r' returns to the start of the line; padding erases a longer previous line
-        print("\r" + line.ljust(78), end="", flush=True)
-        debug_keys.clear()
-
 def main():
-    init_canvas(Arena_size.dims.value)
+    init_canvas(Arena_size.dims.value, 2)
     spawn_items(1)                                      # items first: actors are drawn in spawn order, so cars end up on top
     arena.spawn(p1_car)
     arena.spawn(cpu_yellow)
@@ -108,20 +64,12 @@ def tick():
 
     cur_keys = current_keys()
 
-    # W toggles debug mode (walls/waypoints overlay + console status line)
-    if key_pressed("w") or key_pressed("W"):
-        set_debug(not debug_mode)
-
     # Advance the game one frame and draw every actor
     arena.tick(cur_keys)
     race.update()                                       # checkpoints, lap counting, finish order
     for a in arena.actors():
         draw_actor(a)
     race.draw_hud(p1_car)                               # lap / position / time in the top bar
-
-    if debug_mode:
-        draw_debug_info(p1_car, lvl=1, gates=(finish_line, splits))
-        update_debug_console(cur_keys)
 
     if "Escape" in cur_keys:
         close_canvas()

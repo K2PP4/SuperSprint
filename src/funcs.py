@@ -305,38 +305,3 @@ def init_arena(lvl: int = 1, size: tuple[int, int] = Arena_size.dims.value):
     clip_x = col * 514
     clip_y = row * 482
     g2d.draw_image(img_path, (0, 0), (clip_x, clip_y), size)
-
-def draw_debug_info(car: Actor, lvl: int = 1, gates: tuple = None):
-    # 1. Draw walls overlay
-    draw_walls(lvl=lvl, color=(255, 0, 0, 80))
-
-    # 2. Draw waypoints overlay, plus the finish line and splits (gates = (finish, splits))
-    wps = load_waypoints(lvl)
-    for wp in wps:
-        g2d.set_color((255, 255, 0), width=0)
-        g2d.draw_circle(wp, 3)
-        g2d.set_color((255, 255, 0, 150), width=1)
-        g2d.draw_circle(wp, 6)
-    if gates:
-        draw_gates(*gates)
-
-    # 3. Draw car bounding box (with margin)
-    x, y = car.pos()
-    w, h = car.size()
-    margin = 2
-    g2d.set_color((0, 255, 0, 220), width=1)
-    g2d.draw_rect((x + margin, y + margin), (w - 2 * margin, h - 2 * margin))
-
-    # 4. Draw telemetry text banner
-    col = int((x + w / 2) // 8)
-    row = int((y + h / 2) // 8)
-    speed = getattr(car, "speed", 0.0)
-    angle = getattr(car, "angle", 0.0)
-    wrenches = getattr(car, "wrenches", 0)
-    spin = getattr(car, "spin_frames", 0)
-    info_text = (f"DEBUG [W] | Pos: ({int(x)}, {int(y)}) | Tile: ({col}, {row}) | Spd: {speed:.1f} "
-                 f"| Ang: {int(angle)}deg | WPs: {len(wps)} | Wr: {wrenches} | Spin: {spin}")
-    g2d.set_color((0, 0, 0, 180), width=0)
-    g2d.draw_rect((4, 4), (len(info_text) * 7 + 10, 18))
-    g2d.set_color((255, 255, 255), width=0)
-    g2d.draw_text(info_text, (len(info_text) * 3.5 + 8, 13), 14)
