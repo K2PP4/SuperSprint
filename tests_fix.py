@@ -15,7 +15,7 @@ from src.funcs import (
     load_gates,
 )
 from src.race import ordinal
-from main import SuperSprintGame, SuperSprintGui
+from src.game_engine import SuperSprintGame, SuperSprintGui
 
 
 def quiet_game() -> SuperSprintGame:
