@@ -28,7 +28,7 @@ class GameEngine:
         self._game = SuperSprintGame()
         self._gui = SuperSprintGui(game=self._game)
 
-    def startup():
+    def startup(self):
         init_canvas(Arena_size.dims.value)
         main_loop(self._gui.tick, SuperSprintGame.FPS)
 
@@ -126,7 +126,7 @@ class SuperSprintGame:
 
     @classmethod
     def map_keys(cls, keys: list[str]) -> list[str]:
-        """Adds the arrow-key equivalent of every WASD key pressed."""
+        """Maps the arrow-key equivalent of every WASD key pressed."""
         mapped = list(keys)
         for key in keys:
             alias = cls.KEY_ALIASES.get(key.lower())
@@ -140,11 +140,9 @@ class SuperSprintGame:
 
     @property
     def countdown_seconds(self) -> int:
-        """Number shown on screen: 5, 4, 3, 2, 1 (0 once the race has started)."""
         return ceil(self.countdown_frames / self.FPS)
 
     def go_visible(self) -> bool:
-        """True for the first second of the race, when 'GO!' is shown."""
         return not self.is_counting_down and self.race.frames < self.FPS
 
     def tick(self, keys: list[str]):
@@ -159,11 +157,9 @@ class SuperSprintGame:
         self.race.update()
 
     def game_over(self) -> bool:
-        """The game ends when the player completes the race."""
         return self.player.is_finished
 
     def game_won(self) -> bool:
-        """Positive conclusion: the player finished first."""
         return self.player.is_finished and self.player.finish_rank == 1
 
 
@@ -177,7 +173,6 @@ class SuperSprintGui:
         self.game = game
 
     def draw_countdown(self):
-        """Big number in the middle of the arena while counting down, then 'GO!'."""
         if self.game.is_counting_down:
             set_color((255, 220, 0))
             draw_text(str(self.game.countdown_seconds), (256, 240), 80)
@@ -202,6 +197,7 @@ class SuperSprintGui:
                 alert("You win!")
             else:
                 alert("Race finished, better luck next time!")
+            close_canvas()
 
         if "Escape" in cur_keys:
             close_canvas()

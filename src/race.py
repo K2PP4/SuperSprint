@@ -17,9 +17,9 @@ class Race:
     A lap is a sequence of "gates" ending with the finish line (FL):
       - CPU cars (tracking = "checkpoints"): hit every checkpoint (waypoint), in order,
         then cross the FL in the race direction.
-      - Human cars (tracking = "splits"): cross every split line 'S' of the map, in order,
+      - Player cars (tracking = "splits"): cross every split line 'S' of the map, in order,
         then the FL. The lines span the whole road, so they cannot be missed by driving
-        a slightly different line, like a person does.
+        a slightly different line.
     In both modes the crossing at the start of the race does not count, and crossing a
     line backwards undoes it, so driving back and forth over a line never gains anything.
     """
@@ -63,7 +63,7 @@ class Race:
         return all(c.is_finished for c in self.cars)
 
     def _mode(self, car: Car) -> str:
-        """Tracking mode of `car`; a human car falls back to checkpoints if the map has no splits."""
+        """Tracking mode of `car`; a player car falls back to checkpoints if the map has no splits."""
         return "splits" if car.tracking == "splits" and self.splits else "checkpoints"
 
     def _lap_length(self, car: Car) -> int:
@@ -168,7 +168,7 @@ class Race:
     def draw_hud(self, player: Car):
         """
         Draws lap / position / wrenches / time in the black bar at the top of the
-        screen (y < 64), and a finish banner once the player has finished.
+        screen (y < 64).
         """
         lap = min(player.laps + 1, self.total_laps)
         last = self.lap_times[player][-1] if self.lap_times[player] else None
@@ -181,7 +181,3 @@ class Race:
         g2d.draw_text(f"TIME {self.seconds:.1f}s", (256, 44), 14)
         g2d.draw_text(f"BEST {min(self.lap_times[player]):.1f}s" if self.lap_times[player] else "BEST --",
                       (416, 44), 14)
-
-        if player.is_finished:
-            g2d.set_color((255, 220, 0))
-            g2d.draw_text(f"FINISH!  {ordinal(player.finish_rank)} place", (256, 240), 30)
