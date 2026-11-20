@@ -21,6 +21,7 @@ SPIN_FRICTION       = 0.97                              # speed multiplier per f
 BOUNCE_FRAMES       = 30                                # frames of lost control after hitting a wall
 BOUNCE_MIN_SPEED    = 1.0                               # minimum rebound speed, so the bounce is always visible
 BOUNCE_FRICTION     = 0.9                               # speed multiplier per frame while bouncing
+COLLISION_RADIUS    = 8                                 # px: distance between car centers to trigger collision
 DETOUR_RADIUS       = 90                                # CPU: how far it looks for a wrench/puddle to aim at
 DETOUR_TIMEOUT      = 60                                # CPU: frames after which it gives up a detour
 WP_JITTER           = 16                                # CPU: random offset (px) applied to each waypoint
@@ -126,6 +127,10 @@ class Car(Actor):
     def is_locked(self) -> bool:
         """True while the car has no control (oil spin or wall rebound)."""
         return self._spin_frames > 0 or self._bounce_frames > 0
+
+    @property
+    def collision_radius(self) -> float:
+        return COLLISION_RADIUS
 
     @property
     def center(self) -> tuple[float, float]:
@@ -267,9 +272,9 @@ class Car(Actor):
             self._angle = self._spin_heading % 360
 
     def collides_with_other(self, other_car: "Car") -> bool:
-        if check_collision(self, other_car):
-            cx1, cy1 = self.center
-            cx2, cy2 = other_car.center
+        cx1, cy1 = self.center
+        cx2, cy2 = other_car.center
+        if dist((cx1, cy1), (cx2, cy2)) < COLLISION_RADIUS:
             ang = degrees(atan2(cy2 - cy1, cx2 - cx1)) % 360
             if not self._is_finished:
                 self.bounce_back(heading=(ang + 180) % 360)

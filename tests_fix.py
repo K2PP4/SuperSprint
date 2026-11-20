@@ -1,6 +1,14 @@
 import os
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
+try:
+    import tkinter
+    _tk = tkinter.Tk()
+    _tk.destroy()
+except Exception:
+    from unittest.mock import MagicMock
+    tkinter.Tk = MagicMock()
+
 import unittest
 
 from src.lib import g2d
@@ -336,6 +344,16 @@ class TestCarCollisions(unittest.TestCase):
         self.assertFalse(self.car1.collides_with_other(distant_car))
         self.assertFalse(self.car1.is_bouncing)
         self.assertFalse(distant_car.is_bouncing)
+
+    def test_collision_radius_boundary(self):
+        # car1 center is at (208, 208)
+        # Car at distance 7 (< 8) should collide
+        close_car = CpuCar((200, 207), Car_colors.blue)
+        self.assertTrue(self.car1.collides_with_other(close_car))
+
+        # Car at distance 9 (>= 8, which collided under the old 16px bounding box) should not collide
+        far_car = CpuCar((200, 209), Car_colors.blue)
+        self.assertFalse(self.car1.collides_with_other(far_car))
 
     def test_check_car_collisions_cycle_in_game_tick(self):
         game = quiet_game()
