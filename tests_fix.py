@@ -315,25 +315,9 @@ class TestGui(unittest.TestCase):
         g2d.init_canvas(Arena_size.dims.value)
         self.gui = SuperSprintGui(quiet_game())
 
-    def test_debug_key_is_not_a_driving_key(self):
-        self.assertNotIn(self.gui.DEBUG_KEY.lower(), SuperSprintGame.KEY_ALIASES)
-
-    def test_toggle_debug(self):
-        self.gui.set_debug(True)
-        self.assertTrue(self.gui.debug_mode)
-        self.gui.set_debug(False)
-        self.assertFalse(self.gui.debug_mode)
-
     def test_tick_draws_during_countdown(self):
         self.gui.tick()
         self.assertEqual(self.gui.game.countdown_seconds, 5)
-
-    def test_tick_draws_in_debug_mode_and_after_countdown(self):
-        skip_countdown(self.gui.game)
-        self.gui.set_debug(True)
-        for _ in range(3):
-            self.gui.tick()
-        self.assertEqual(self.gui.game.race.frames, 3)
 
 
 if __name__ == "__main__":

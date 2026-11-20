@@ -258,17 +258,6 @@ class Gate:
         along = self._along(p) + t * (self._along(q) - self._along(p))
         return way if self.lo <= along < self.hi else 0
 
-    def draw(self, color: tuple, label: str = ""):
-        """Debug overlay: the line, plus an optional label next to its start."""
-        if self.vertical:
-            start, end = (self.line, self.lo), (self.line, self.hi)
-        else:
-            start, end = (self.lo, self.line), (self.hi, self.line)
-        g2d.set_color(color, 2)
-        g2d.draw_line(start, end, 2)
-        if label:
-            g2d.draw_text(label, (start[0] + 12, start[1] + 8), 12)
-
 def load_gates(lvl: int, racing_line: list[Point]) -> tuple[Gate, list[Gate]]:
     """
     Reads the finish line ('F') and the splits ('S') from maps/lvl-{lvl}.txt.
@@ -283,12 +272,6 @@ def load_gates(lvl: int, racing_line: list[Point]) -> tuple[Gate, list[Gate]]:
     splits = [Gate(box, racing_line) for box in load_marked_groups(lvl, "S")]
     splits.sort(key=lambda g: (g.order - finish.order) % len(racing_line))
     return finish, splits
-
-def draw_gates(finish: Gate, splits: list[Gate]):
-    """Debug overlay: finish line in white, splits in cyan (S1, S2, ... in lap order)."""
-    finish.draw((255, 255, 255), "FL")
-    for i, split in enumerate(splits, start=1):
-        split.draw((0, 220, 255), f"S{i}")
 
 def draw_actor(actor: Actor):
     # Cars use the spritesheet; items (wrench, oil) draw themselves.

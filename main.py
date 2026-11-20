@@ -17,7 +17,6 @@ from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
 from src.funcs import (
     draw_actor,
     init_arena,
-    draw_debug_info,
     load_waypoints,
     load_items,
     load_gates,
@@ -27,10 +26,9 @@ from src.race import Race
 
 class SuperSprintGame:
     """
-    Game logic: builds the characters from the level configuration file
+    Builds the characters from the level configuration file
     (maps/lvl-N.txt), encapsulates cars and arena, runs the start countdown
-    and checks how the race ends. It knows nothing about drawing: that is
-    the job of SuperSprintGui.
+    and checks how the race ends.
     """
     FPS = 30
     COUNTDOWN_SECONDS = 5
@@ -39,8 +37,8 @@ class SuperSprintGame:
     START_Y_GAP = 8
     START_ANGLE = 180
     TOTAL_LAPS = 3
+    PLAYER_NAME = "Player"
 
-    # WASD set of commands: each key acts as the corresponding arrow key
     KEY_ALIASES = {
         "w": "ArrowUp",
         "a": "ArrowLeft",
@@ -77,7 +75,7 @@ class SuperSprintGame:
         self.player = UsrCar(
             self.grid_pos(2),
             Car_colors.red,
-            "Player",
+            PLAYER_NAME,
             angle=self.START_ANGLE,
         )
         self.player.max_speed(5)
@@ -106,7 +104,7 @@ class SuperSprintGame:
         return (self.START_X, self.START_Y + self.START_Y_GAP * slot)
 
     def log(self, message: str):
-        print("\r" + message.ljust(78))
+        print("\r" + message)
 
     def spawn_actors(self):
         """Puts items (from the map file) and cars into the arena."""
@@ -163,16 +161,11 @@ class SuperSprintGame:
 class SuperSprintGui:
     """
     Representation of the game: drawing (images and g2d functions),
-    keyboard input, debug overlay and the tick method.
+    keyboard input and the tick method.
     """
-    DEBUG_WINDOW = 30
-    DEBUG_KEY = "F1"                                    # W is now used to drive
 
     def __init__(self, game: SuperSprintGame):
         self.game = game
-        self.debug_mode = False
-        self.debug_frames = 0
-        self.debug_keys: set[str] = set()
 
     def draw_countdown(self):
         """Big number in the middle of the arena while counting down, then 'GO!'."""
@@ -188,8 +181,6 @@ class SuperSprintGui:
         init_arena(self.game.level)
 
         cur_keys = current_keys()
-        if key_pressed(self.DEBUG_KEY):
-            self.set_debug(not self.debug_mode)
 
         self.game.tick(cur_keys)
         for actor in self.game.arena.actors():
@@ -197,43 +188,14 @@ class SuperSprintGui:
         self.game.race.draw_hud(self.game.player)
         self.draw_countdown()
 
-        if self.debug_mode:
-            draw_debug_info(
-                self.game.player,
-                lvl=self.game.level,
-                gates=(self.game.finish_line, self.game.splits),
-            )
-            self.update_debug_console(cur_keys)
-
         if self.game.game_over():
             if self.game.game_won():
                 alert("You win!")
             else:
                 alert("Race finished, better luck next time!")
-            close_canvas()
 
         if "Escape" in cur_keys:
             close_canvas()
-
-    def set_debug(self, enabled: bool):
-        self.debug_mode = enabled
-        self.debug_frames = 0
-        self.debug_keys.clear()
-        if enabled:
-            print(f"Debug mode ON  (press {self.DEBUG_KEY} to turn it off)")
-        else:
-            print("\nDebug mode OFF")
-
-    def update_debug_console(self, keys: list[str]):
-        self.debug_keys.update(keys)
-        self.debug_frames += 1
-        if self.debug_frames % self.DEBUG_WINDOW == 0:
-            step = (self.debug_frames // self.DEBUG_WINDOW - 1) % 3 + 1
-            dots = ("." * step).ljust(3)
-            pressed = ", ".join(sorted(self.debug_keys)) or "none"
-            line = f"Debug mode running{dots} | keys (last {self.DEBUG_WINDOW}f): {pressed}"
-            print("\r" + line.ljust(78), end="", flush=True)
-            self.debug_keys.clear()
 
 
 def main():
