@@ -23,9 +23,9 @@ BOUNCE_MIN_SPEED    = 1.0                               # minimum rebound speed,
 BOUNCE_FRICTION     = 0.9                               # speed multiplier per frame while bouncing
 DETOUR_RADIUS       = 90                                # CPU: how far it looks for a wrench/puddle to aim at
 DETOUR_TIMEOUT      = 60                                # CPU: frames after which it gives up a detour
-WP_JITTER           = 8                                 # CPU: random offset (px) applied to each waypoint
-WP_REACH_RADIUS     = 16                                # CPU: distance (px) at which a waypoint counts as reached
-STUCK_FRAMES        = 120                               # CPU: frames without leaving STUCK_RADIUS before it is reset
+WP_JITTER           = 16                                # CPU: random offset (px) applied to each waypoint
+WP_REACH_RADIUS     = 32                                # CPU: distance (px) at which a waypoint counts as reached
+STUCK_FRAMES        = 60                                # CPU: frames without leaving STUCK_RADIUS before it is reset
 STUCK_RADIUS        = 12                                # CPU: px
 WRENCH_SPEED_BONUS  = 0.5                               # max-speed bonus per wrench
 MAX_WRENCHES        = 5                                 # wrenches beyond this are collected but give no bonus
@@ -173,15 +173,21 @@ class Car(Actor):
         self._speed = 0.0
         self._spin_frames = self._bounce_frames = 0
 
-    def bounce_back(self, damp: float = 0.35):
+    def bounce_back(self, damp: float = 0.35, heading: float = None):
         """
-        Wall hit: the car rebounds along its heading and loses control
-        for BOUNCE_FRAMES frames.
+        Wall or car hit: the car rebounds and loses control
+        for BOUNCE_FRAMES frames (or 15 frames for car-on-car impacts).
+        If heading is provided, rebounds along that heading.
         """
-        direction = -1.0 if self._speed > 0 else 1.0
-        self._speed = direction * max(abs(self._speed) * damp, BOUNCE_MIN_SPEED)
-        self._bounce_frames = BOUNCE_FRAMES
-        self._bounce_heading = self._angle
+        if heading is not None:
+            self._bounce_heading = heading
+            self._speed = max(abs(self._speed) * damp, BOUNCE_MIN_SPEED)
+            self._bounce_frames = 15
+        else:
+            direction = -1.0 if self._speed > 0 else 1.0
+            self._speed = direction * max(abs(self._speed) * damp, BOUNCE_MIN_SPEED)
+            self._bounce_frames = BOUNCE_FRAMES
+            self._bounce_heading = self._angle
 
     def bounce_step(self, arena: Arena):
         """
@@ -255,10 +261,23 @@ class Car(Actor):
             self._prev_pos = self._pos
             self._pos = next_pos
         else:
-            self._speed = -self._speed * 0.35           # slide rebounds, no extra lock
+            self._speed = -self._speed * 0.35
 
         if self._spin_frames == 0:
             self._angle = self._spin_heading % 360
+
+    def collides_with_other(self, other_car: "Car") -> bool:
+        if check_collision(self, other_car):
+            cx1, cy1 = self.center
+            cx2, cy2 = other_car.center
+            ang = degrees(atan2(cy2 - cy1, cx2 - cx1)) % 360
+            if not self._is_finished:
+                self.bounce_back(heading=(ang + 180) % 360)
+            if not other_car._is_finished:
+                other_car.bounce_back(heading=ang)
+            return True
+        else:
+            return False
 
     def move(self, arena: Arena):
         raise NotImplementedError("Abstract method implemented in child classes.")

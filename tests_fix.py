@@ -320,5 +320,42 @@ class TestGui(unittest.TestCase):
         self.assertEqual(self.gui.game.countdown_seconds, 5)
 
 
+class TestCarCollisions(unittest.TestCase):
+    def setUp(self):
+        self.arena = Arena(Arena_size.dims.value)
+        self.car1 = UsrCar((200, 200), Car_colors.red)
+        self.car2 = CpuCar((205, 205), Car_colors.yellow)
+
+    def test_collides_with_other_detects_collision(self):
+        self.assertTrue(self.car1.collides_with_other(self.car2))
+        self.assertTrue(self.car1.is_bouncing)
+        self.assertTrue(self.car2.is_bouncing)
+
+    def test_collides_with_other_false_when_apart(self):
+        distant_car = CpuCar((300, 300), Car_colors.blue)
+        self.assertFalse(self.car1.collides_with_other(distant_car))
+        self.assertFalse(self.car1.is_bouncing)
+        self.assertFalse(distant_car.is_bouncing)
+
+    def test_check_car_collisions_cycle_in_game_tick(self):
+        game = quiet_game()
+        skip_countdown(game)
+        # Move CPU 1 on top of CPU 2
+        game.cpu_yellow._pos = game.cpu_blue._pos
+        self.assertFalse(game.cpu_yellow.is_bouncing)
+        self.assertFalse(game.cpu_blue.is_bouncing)
+        game.tick([])
+        self.assertTrue(game.cpu_yellow.is_bouncing)
+        self.assertTrue(game.cpu_blue.is_bouncing)
+
+    def test_finished_car_collision_does_not_unfinish(self):
+        self.car1.finish(1)
+        self.assertTrue(self.car1.is_finished)
+        self.assertTrue(self.car1.collides_with_other(self.car2))
+        self.assertTrue(self.car1.is_finished)
+        self.assertFalse(self.car1.is_bouncing)
+        self.assertTrue(self.car2.is_bouncing)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,7 +13,7 @@ from src.lib.g2d import (
 )
 from src.lib.actor import Arena
 from src.enums import Arena_size, Car_colors
-from src.classes import UsrCar, CpuCar, Wrench, OilPuddle
+from src.classes import Car, UsrCar, CpuCar, Wrench, OilPuddle
 from src.funcs import (
     draw_actor,
     init_arena,
@@ -43,7 +43,7 @@ class SuperSprintGame:
     COUNTDOWN_SECONDS = 5
     START_X = 264
     START_Y = 80
-    START_Y_GAP = 8
+    START_Y_GAP = 20
     START_ANGLE = 180
     TOTAL_LAPS = 3
     PLAYER_NAME = "Player"
@@ -145,6 +145,13 @@ class SuperSprintGame:
     def go_visible(self) -> bool:
         return not self.is_counting_down and self.race.frames < self.FPS
 
+    def check_car_collisions(self):
+        """Checks mutual collisions between all cars in the race."""
+        cars = self.race.cars
+        for i in range(len(cars)):
+            for j in range(i + 1, len(cars)):
+                cars[i].collides_with_other(cars[j])
+
     def tick(self, keys: list[str]):
         """
         Advances the game by one frame. During the countdown the cars stay on the
@@ -154,6 +161,7 @@ class SuperSprintGame:
             self.countdown_frames -= 1
             return
         self.arena.tick(self.map_keys(keys))
+        self.check_car_collisions()
         self.race.update()
 
     def game_over(self) -> bool:
