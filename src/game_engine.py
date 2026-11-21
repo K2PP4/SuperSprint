@@ -1,4 +1,6 @@
 from math import ceil
+import os
+import pygame as pg
 
 from src.lib.g2d import (
     init_canvas,
@@ -22,6 +24,7 @@ from src.funcs import (
     load_gates,
 )
 from src.race import Race
+from src.lib import g2d
 
 class GameEngine:
     def __init__(self):
@@ -59,6 +62,9 @@ class SuperSprintGame:
         self.level = level
         self.arena = Arena(Arena_size.dims.value)
         self.countdown_frames = self.COUNTDOWN_SECONDS * self.FPS
+        self.yellow_flag_frames = 0
+        self.finish_delay_frames = 0
+        self.finish_delay_started = False
         self.waypoints = load_waypoints(
             self.level,
             start_pos=(self.START_X, self.START_Y + 12),
@@ -150,7 +156,8 @@ class SuperSprintGame:
         cars = self.race.cars
         for i in range(len(cars)):
             for j in range(i + 1, len(cars)):
-                cars[i].collides_with_other(cars[j])
+                if cars[i].collides_with_other(cars[j]):
+                    self.yellow_flag_frames = 30
 
     def tick(self, keys: list[str]):
         """
@@ -162,10 +169,19 @@ class SuperSprintGame:
             return
         self.arena.tick(self.map_keys(keys))
         self.check_car_collisions()
+        if self.yellow_flag_frames > 0:
+            self.yellow_flag_frames -= 1
         self.race.update()
+        if any(car.is_finished for car in self.race.cars):
+            if not self.finish_delay_started:
+                self.finish_delay_frames = 5 * self.FPS
+                self.finish_delay_started = True
+            elif self.finish_delay_frames > 0:
+                self.finish_delay_frames -= 1
 
     def game_over(self) -> bool:
-        return self.player.is_finished
+        return (self.finish_delay_started
+                and self.finish_delay_frames == 0)
 
     def game_won(self) -> bool:
         return self.player.is_finished and self.player.finish_rank == 1
@@ -176,9 +192,23 @@ class SuperSprintGui:
     Representation of the game: drawing (images and g2d functions),
     keyboard input and the tick method.
     """
+    FLAG_SOURCE_SIZE = (16, 16)
+    FLAG_DRAW_SIZE = (32, 32)
+    FLAG_POS = (472, 16)
+    YELLOW_FLAG_ROW = 128
+    CHECKER_FLAG_ROW = 160
+    FLAG_FIRST_FRAME_X = 128
+    FLAG_FRAME_COUNT = 8
+    FLAG_FRAME_MS = 4
 
     def __init__(self, game: SuperSprintGame):
         self.game = game
+        self.flag_sheet = None
+        self.flag_sprite_sheet = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "img",
+            "super-sprint.png",
+        )
 
     def draw_countdown(self):
         if self.game.is_counting_down:
@@ -187,6 +217,33 @@ class SuperSprintGui:
         elif self.game.go_visible():
             set_color((0, 255, 0))
             draw_text("GO!", (256, 240), 80)
+
+    def draw_scaled_sprite_flag(self, pos: tuple[int, int], clip_pos: tuple[int, int]):
+        if self.flag_sheet is None:
+            self.flag_sheet = pg.image.load(self.flag_sprite_sheet).convert_alpha()
+        tile = self.flag_sheet.subsurface(
+            pg.Rect(clip_pos[0], clip_pos[1],
+                    self.FLAG_SOURCE_SIZE[0], self.FLAG_SOURCE_SIZE[1])
+        )
+        scaled = pg.transform.smoothscale(tile, self.FLAG_DRAW_SIZE)
+        g2d.drawing_surface().blit(scaled, pos)
+
+    def draw_race_flags(self):
+        """Draws the animated yellow flag for incidents and the checkered flag at the finish."""
+        frame = (self.game.race.frames // self.FLAG_FRAME_MS) % self.FLAG_FRAME_COUNT
+        clip_x = self.FLAG_FIRST_FRAME_X + frame * self.FLAG_SOURCE_SIZE[0]
+
+        if any(car.is_finished for car in self.game.race.cars):
+            self.draw_scaled_sprite_flag(
+                self.FLAG_POS,
+                (clip_x, self.CHECKER_FLAG_ROW),
+            )
+        elif (any(car.is_spinning for car in self.game.race.cars)
+                or self.game.yellow_flag_frames > 0):
+            self.draw_scaled_sprite_flag(
+                self.FLAG_POS,
+                (clip_x, self.YELLOW_FLAG_ROW),
+            )
 
     def tick(self):
         clear_canvas()
@@ -198,6 +255,7 @@ class SuperSprintGui:
         for actor in self.game.arena.actors():
             draw_actor(actor)
         self.game.race.draw_hud(self.game.player)
+        self.draw_race_flags()
         self.draw_countdown()
 
         if self.game.game_over():

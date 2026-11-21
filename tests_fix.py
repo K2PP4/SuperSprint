@@ -226,12 +226,17 @@ class TestGame(unittest.TestCase):
         self.assertFalse(self.game.game_over())
         self.assertFalse(self.game.game_won())
         self.game.player.finish(1)
-        self.assertTrue(self.game.game_over())
+        self.assertFalse(self.game.game_over())
         self.assertTrue(self.game.game_won())
+        self.game.finish_delay_frames = SuperSprintGame.FPS * 5
+        self.game.finish_delay_started = True
+        for _ in range(SuperSprintGame.FPS * 5):
+            self.game.finish_delay_frames -= 1
+        self.assertTrue(self.game.game_over())
 
     def test_game_over_but_not_won(self):
         self.game.player.finish(3)
-        self.assertTrue(self.game.game_over())
+        self.assertFalse(self.game.game_over())
         self.assertFalse(self.game.game_won())
 
 
@@ -327,6 +332,49 @@ class TestGui(unittest.TestCase):
         self.gui.tick()
         self.assertEqual(self.gui.game.countdown_seconds, 5)
 
+    def test_yellow_flag_uses_sprite_animation(self):
+        calls = []
+        original = SuperSprintGui.draw_scaled_sprite_flag
+        SuperSprintGui.draw_scaled_sprite_flag = lambda self, *args: calls.append(args)
+        try:
+            self.gui.game.player.start_spin()
+            self.gui.draw_race_flags()
+        finally:
+            SuperSprintGui.draw_scaled_sprite_flag = original
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1], (128, self.gui.YELLOW_FLAG_ROW))
+
+    def test_yellow_flag_uses_sprite_animation_after_car_collision(self):
+        calls = []
+        original = SuperSprintGui.draw_scaled_sprite_flag
+        SuperSprintGui.draw_scaled_sprite_flag = lambda self, *args: calls.append(args)
+        try:
+            self.gui.game.yellow_flag_frames = 30
+            self.gui.draw_race_flags()
+        finally:
+            SuperSprintGui.draw_scaled_sprite_flag = original
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1], (128, self.gui.YELLOW_FLAG_ROW))
+
+    def test_checker_flag_uses_animation_when_first_car_finishes(self):
+        calls = []
+        original = SuperSprintGui.draw_scaled_sprite_flag
+        SuperSprintGui.draw_scaled_sprite_flag = lambda self, *args: calls.append(args)
+        try:
+            self.gui.game.cpu_yellow.finish(1)
+            self.gui.game.player.start_spin()
+            for frame in range(SuperSprintGame.FPS):
+                self.gui.game.race.frames = frame
+                self.gui.draw_race_flags()
+        finally:
+            SuperSprintGui.draw_scaled_sprite_flag = original
+
+        self.assertEqual(len(calls), SuperSprintGame.FPS)
+        self.assertEqual({call[1][1] for call in calls}, {self.gui.CHECKER_FLAG_ROW})
+        self.assertEqual(len({call[1][0] for call in calls}), self.gui.FLAG_FRAME_COUNT)
+
 
 class TestCarCollisions(unittest.TestCase):
     def setUp(self):
@@ -365,6 +413,7 @@ class TestCarCollisions(unittest.TestCase):
         game.tick([])
         self.assertTrue(game.cpu_yellow.is_bouncing)
         self.assertTrue(game.cpu_blue.is_bouncing)
+        self.assertGreater(game.yellow_flag_frames, 0)
 
     def test_finished_car_collision_does_not_unfinish(self):
         self.car1.finish(1)
